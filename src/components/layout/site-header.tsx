@@ -20,14 +20,12 @@ export function SiteHeader() {
         >
           <img
             src="/mark.png"
-            alt="Omnicore Solutions"
-            className="size-8 object-contain transition-transform duration-200 group-hover:scale-105"
+            alt=""
+            className="size-8 object-cover object-center"
           />
-          <div className="flex flex-col">
-            <span className="text-[15px] font-semibold tracking-tight text-[#1d1d1f]">
-              {site.shortName}
-            </span>
-          </div>
+          <span className="text-[15px] font-semibold tracking-tight text-[#1d1d1f]">
+            {site.shortName}
+          </span>
         </Link>
 
         {/* Desktop Navigation - Apple-style understated links */}

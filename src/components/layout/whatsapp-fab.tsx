@@ -20,14 +20,9 @@ export function WhatsappFab() {
         className="group relative flex items-center gap-3 rounded-full bg-[#1fa855] px-4 py-2.5 text-white shadow-[0_6px_20px_rgba(31,168,85,0.35)] border border-[#1b934b] transition-all duration-300 hover:scale-105 hover:bg-[#1b934b] active:scale-95"
       >
         <WhatsAppIcon className="size-5 shrink-0 text-white" />
-        <div className="flex flex-col text-left">
-          <span className="text-[12px] font-bold text-white tracking-tight leading-none">
-            WhatsApp Desk
-          </span>
-          <span className="text-[10px] text-emerald-100 font-medium leading-tight mt-0.5">
-            {copy.yardAddressLine2 || "Cranborne · Harare"}
-          </span>
-        </div>
+        <span className="text-[12px] font-bold text-white tracking-tight leading-none">
+          WhatsApp Desk
+        </span>
       </a>
     </aside>
   );

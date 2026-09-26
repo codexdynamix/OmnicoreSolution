@@ -320,10 +320,12 @@ function stageChipClass(stage: CRMClient["stage"]) {
   return "bg-black/[0.05] text-[#1D1D1F]";
 }
 
-export function AdminBackoffice() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return isSessionAuthenticated();
-  });
+function AdminBackoffice() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    setIsAuthenticated(isSessionAuthenticated());
+  }, []);
 
   const [adminProfile, setAdminProfile] = useState<AdminProfile>(getStoredAdminProfile);
   const [profileName, setProfileName] = useState(adminProfile.fullName);
@@ -1533,8 +1535,8 @@ export function AdminBackoffice() {
             <Link to="/" className="flex items-center gap-2.5 group">
               <img
                 src="/mark.png"
-                alt="Omnicore Solutions"
-                className="size-8 object-contain transition-transform group-hover:scale-105"
+                alt=""
+                className="size-8 object-cover"
               />
               <span className="text-sm font-semibold tracking-tight text-[#1D1D1F]">
                 Omnicore Solutions
@@ -5795,10 +5797,7 @@ export function AdminBackoffice() {
                         <span className="text-[10px] text-[#6E6E73]">Website Floating FAB:</span>
                         <div className="inline-flex items-center gap-2 rounded-full bg-[#1FA855] px-3 py-1.5 text-white shadow-xs">
                           <WhatsAppIcon className="size-3.5" />
-                          <div className="text-left">
-                            <span className="text-[10px] font-bold block leading-tight">WhatsApp Desk</span>
-                            <span className="text-[8px] text-emerald-100 block leading-tight">{cmsForm.yardAddressLine2 || "Cranborne · Harare"}</span>
-                          </div>
+                          <span className="text-[10px] font-bold leading-tight">WhatsApp Desk</span>
                         </div>
                       </div>
 

@@ -165,9 +165,12 @@ async function renderAllRoutes() {
     for (const route of ROUTES) {
       const url = `${baseUrl}${route}`;
       try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        const res = await fetch(url, {
+          signal: AbortSignal.timeout(route === "/admin" ? 25000 : 8000),
+        });
         if (!res.ok) {
           console.warn(`[build:hostinger] Warning: Fetch ${route} returned status ${res.status}`);
+          if (route === "/admin") writeAdminSpaFallback();
           continue;
         }
 
@@ -193,7 +196,17 @@ async function renderAllRoutes() {
         console.log(`[build:hostinger] Pre-rendered: ${route} (${finalHtml.length} bytes)`);
       } catch (err) {
         console.error(`[build:hostinger] Error rendering route ${route}:`, err.message);
+        if (route === "/admin") {
+          writeAdminSpaFallback();
+        }
       }
+    }
+
+    // Guarantee /admin is always on disk even if prerender skipped it
+    const adminHtml = join(distDir, "admin.html");
+    const adminDirHtml = join(distDir, "admin", "index.html");
+    if (!existsSync(adminHtml) && !existsSync(adminDirHtml)) {
+      writeAdminSpaFallback();
     }
   } finally {
     if (serverProc && typeof serverProc.kill === "function") {
@@ -205,6 +218,38 @@ async function renderAllRoutes() {
 }
 
 await renderAllRoutes();
+
+function writeAdminSpaFallback() {
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Operations Backoffice · Omnicore</title>
+  ${mainCssFile ? `<link rel="stylesheet" crossorigin href="/assets/${mainCssFile}">` : ""}
+  <script>
+    window.$R = window.$R || {};
+    window.$R["tsr"] = window.$R["tsr"] || [];
+    window.$_TSR = window.$_TSR || {
+      h() { this.hydrated = true; },
+      e() { this.streamEnded = true; },
+      c() {},
+      p(e) { typeof e === "function" && e(); },
+      buffer: [],
+      initialized: true,
+      t: new Map(),
+      router: { manifest: { routes: {} }, matches: [] }
+    };
+  </script>
+  ${mainJsFile ? `<script type="module" crossorigin src="/assets/${mainJsFile}"></script>` : ""}
+</head>
+<body></body>
+</html>`;
+  mkdirSync(join(distDir, "admin"), { recursive: true });
+  writeFileSync(join(distDir, "admin.html"), html, "utf8");
+  writeFileSync(join(distDir, "admin", "index.html"), html, "utf8");
+  console.log("[build:hostinger] Wrote SPA fallback for /admin");
+}
 
 // 7. Write production Apache / LiteSpeed .htaccess for Hostinger
 const htaccessPath = join(distDir, ".htaccess");
@@ -221,9 +266,12 @@ const htaccessContent = `# =====================================================
   RewriteCond %{REQUEST_URI} ^/api/ [NC]
   RewriteRule ^ - [L]
 
-  # Don't rewrite real existing files or directories
-  RewriteCond %{REQUEST_FILENAME} -f [OR]
-  RewriteCond %{REQUEST_FILENAME} -d
+  # Backoffice — map /admin before Hostinger/directory rules can 404 it
+  RewriteRule ^admin$ /admin.html [L]
+  RewriteRule ^admin/$ /admin.html [L]
+
+  # Don't rewrite real existing files
+  RewriteCond %{REQUEST_FILENAME} -f
   RewriteRule ^ - [L]
 
   # Check if route.html exists (e.g. /catalogue -> /catalogue.html)

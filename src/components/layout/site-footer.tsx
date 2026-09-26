@@ -47,8 +47,8 @@ export function SiteFooter() {
           <Link to="/" className="inline-flex items-center gap-2.5 group">
             <img
               src="/mark.png"
-              alt={`${brandName} Logo`}
-              className="size-8 object-contain transition-transform duration-200 group-hover:scale-105"
+              alt=""
+              className="size-8 object-cover object-center"
             />
             <span className="text-sm font-semibold tracking-tight text-[#1d1d1f]">
               {brandName}

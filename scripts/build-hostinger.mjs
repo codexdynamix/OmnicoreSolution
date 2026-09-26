@@ -1,74 +1,216 @@
-import { execSync } from "node:child_process";
-import { existsSync, cpSync, mkdirSync, writeFileSync, readdirSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { execSync, spawn } from "node:child_process";
+import { existsSync, cpSync, mkdirSync, writeFileSync, readdirSync, rmSync } from "node:fs";
+import { resolve, join, dirname } from "node:path";
 
-console.log("[build:hostinger] Starting build for Hostinger deployment...");
-
-// Run Vite build using npm wrapper
-execSync("node scripts/with-app-env.mjs vite build", { stdio: "inherit" });
+console.log("[build:hostinger] Starting production build for Hostinger...");
 
 const distDir = resolve("dist");
-if (!existsSync(distDir)) {
-  mkdirSync(distDir, { recursive: true });
-}
 
-// Copy static assets generated from build (.vercel/output/static)
+// 1. Clean existing dist directory
+if (existsSync(distDir)) {
+  rmSync(distDir, { recursive: true, force: true });
+}
+mkdirSync(distDir, { recursive: true });
+
+// 2. Run Vite build to generate client assets and bundles
+console.log("[build:hostinger] Running Vite production build...");
+execSync("npx vite build", { stdio: "inherit" });
+
+// 3. Copy static assets from build output
 const staticOutput = resolve(".vercel/output/static");
 if (existsSync(staticOutput)) {
-  console.log("[build:hostinger] Copying static build outputs to ./dist/ ...");
+  console.log("[build:hostinger] Copying static build output to dist/ ...");
   cpSync(staticOutput, distDir, { recursive: true });
 }
 
-// Ensure all public files (images, logos, favicon, api, etc.) are present
+// 4. Copy all public assets (images, logos, favicon, and PHP API)
 const publicDir = resolve("public");
 if (existsSync(publicDir)) {
-  console.log("[build:hostinger] Ensuring all public assets & PHP API files are in ./dist/ ...");
+  console.log("[build:hostinger] Copying public assets and PHP API to dist/ ...");
   cpSync(publicDir, distDir, { recursive: true });
 }
 
-// Find generated JS and CSS bundles in dist/assets
+// 5. Detect latest production JS and CSS bundles
 const assetsDir = join(distDir, "assets");
-let mainJsFile = "index.js";
-let mainCssFile = "styles.css";
+let mainJsFile = "";
+let mainCssFile = "";
 
 if (existsSync(assetsDir)) {
   const assetFiles = readdirSync(assetsDir);
-  const foundJs = assetFiles.find((f) => f.startsWith("index-") && f.endsWith(".js")) ||
-                  assetFiles.find((f) => f.endsWith(".js") && !f.includes("chunk"));
-  const foundCss = assetFiles.find((f) => f.endsWith(".css"));
-  if (foundJs) mainJsFile = foundJs;
-  if (foundCss) mainCssFile = foundCss;
-  console.log(`[build:hostinger] Detected bundle assets: JS=${mainJsFile}, CSS=${mainCssFile}`);
+  const jsCandidates = assetFiles.filter((f) => f.startsWith("index-") && f.endsWith(".js"));
+  if (jsCandidates.length > 0) {
+    mainJsFile = jsCandidates[jsCandidates.length - 1];
+  } else {
+    const anyJs = assetFiles.find((f) => f.endsWith(".js") && !f.includes("chunk"));
+    mainJsFile = anyJs || "index.js";
+  }
+
+  const cssCandidates = assetFiles.filter((f) => f.startsWith("styles-") && f.endsWith(".css"));
+  if (cssCandidates.length > 0) {
+    mainCssFile = cssCandidates[cssCandidates.length - 1];
+  } else {
+    const anyCss = assetFiles.find((f) => f.endsWith(".css"));
+    mainCssFile = anyCss || "styles.css";
+  }
 }
 
-// Generate Hostinger-compatible index.html with SPA entry point and correct asset links
-const distIndex = join(distDir, "index.html");
-const htmlTemplate = `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Omnicore Solutions | Machinery for Zimbabwe's Farms, Mines and Sites</title>
-    <meta name="description" content="Harare-based supplier of mining equipment, construction machinery hire, hardware, farming plant and industrial machines." />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" type="image/png" href="/mark.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" />
-    <script type="module" crossorigin src="/assets/${mainJsFile}"></script>
-    <link rel="stylesheet" crossorigin href="/assets/${mainCssFile}">
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
-</html>`;
-writeFileSync(distIndex, htmlTemplate, "utf8");
+console.log(`[build:hostinger] Detected production bundles: JS=${mainJsFile}, CSS=${mainCssFile}`);
 
-// Generate .htaccess for Hostinger Apache/LiteSpeed server
-// Supports SPA routing, PHP API pass-through, and compression
+// 6. Prerender all site routes
+const ROUTES = [
+  "/",
+  "/catalogue",
+  "/services",
+  "/services/mining",
+  "/services/hardware",
+  "/services/hire",
+  "/services/farming",
+  "/services/industry",
+  "/contact",
+  "/quote",
+  "/projects",
+  "/insights",
+  "/insights/hammer-mill-zimbabwe",
+  "/insights/gold-processing-payback",
+  "/insights/rainy-season-construction-hire",
+  "/insights/feed-pellets-second-income",
+  "/insights/fence-making-business-zimbabwe",
+  "/admin",
+];
+
+async function isServerRunning(url) {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(1500) });
+    return res.status === 200;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureLocalServer() {
+  const checkUrl = "http://127.0.0.1:3000/";
+  if (await isServerRunning(checkUrl)) {
+    console.log("[build:hostinger] Found active server on http://127.0.0.1:3000");
+    return { process: null, baseUrl: "http://127.0.0.1:3000" };
+  }
+
+  console.log("[build:hostinger] Starting temporary server to pre-render static HTML pages...");
+  const child = spawn("node", ["scripts/with-app-env.mjs", "vite", "dev", "--host", "127.0.0.1", "--port", "3000"], {
+    stdio: "ignore",
+    detached: true,
+  });
+
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 400));
+    if (await isServerRunning(checkUrl)) {
+      console.log("[build:hostinger] Temporary server ready on http://127.0.0.1:3000");
+      return { process: child, baseUrl: "http://127.0.0.1:3000" };
+    }
+  }
+
+  throw new Error("Could not start local rendering server for Hostinger pre-rendering.");
+}
+
+function processHtmlForProduction(rawHtml) {
+  let html = rawHtml;
+
+  // Replace dev entry script with production hashed bundle
+  if (mainJsFile) {
+    html = html.replace(
+      /<script[^>]*src=["'][^"']*virtual:tanstack-start-dev-client-entry[^"']*["'][^>]*><\/script>/gi,
+      `<script type="module" crossorigin src="/assets/${mainJsFile}"></script>`
+    );
+  }
+
+  // Replace dev styles with production stylesheet
+  if (mainCssFile) {
+    html = html.replace(
+      /<link[^>]*href=["'][^"']*@tanstack-start\/styles\.css[^"']*["'][^>]*\/?>/gi,
+      `<link rel="stylesheet" crossorigin href="/assets/${mainCssFile}">`
+    );
+  }
+
+  // Strip Vite dev-only scripts if present
+  html = html.replace(/<script[^>]*src=["'][^"']*@vite\/client[^"']*["'][^>]*><\/script>/gi, "");
+  html = html.replace(/<script[^>]*src=["'][^"']*@react-refresh[^"']*["'][^>]*><\/script>/gi, "");
+
+  // Ensure resilient TSR fallback script is in head or body
+  const tsrSafetyScript = `
+<script>
+  window.$R = window.$R || {};
+  window.$R["tsr"] = window.$R["tsr"] || [];
+  window.$_TSR = window.$_TSR || {
+    h() { this.hydrated = true; },
+    e() { this.streamEnded = true; },
+    c() {},
+    p(e) { typeof e === "function" && e(); },
+    buffer: [],
+    initialized: true,
+    t: new Map(),
+    router: { manifest: { routes: {} }, matches: [] }
+  };
+</script>`;
+
+  if (!html.includes("window.$_TSR") && !html.includes("self.$_TSR")) {
+    html = html.replace("</head>", `${tsrSafetyScript}\n</head>`);
+  }
+
+  return html;
+}
+
+async function renderAllRoutes() {
+  const { process: serverProc, baseUrl } = await ensureLocalServer();
+
+  try {
+    for (const route of ROUTES) {
+      const url = `${baseUrl}${route}`;
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) {
+          console.warn(`[build:hostinger] Warning: Fetch ${route} returned status ${res.status}`);
+          continue;
+        }
+
+        const rawHtml = await res.text();
+        const finalHtml = processHtmlForProduction(rawHtml);
+
+        // Determine destination paths
+        let targetFile;
+        if (route === "/") {
+          targetFile = join(distDir, "index.html");
+        } else {
+          const subDir = join(distDir, route.replace(/^\//, ""));
+          mkdirSync(subDir, { recursive: true });
+          targetFile = join(subDir, "index.html");
+
+          // Also write flat fallback (e.g. dist/catalogue.html)
+          const flatFile = join(distDir, `${route.replace(/^\//, "")}.html`);
+          mkdirSync(dirname(flatFile), { recursive: true });
+          writeFileSync(flatFile, finalHtml, "utf8");
+        }
+
+        writeFileSync(targetFile, finalHtml, "utf8");
+        console.log(`[build:hostinger] Pre-rendered: ${route} (${finalHtml.length} bytes)`);
+      } catch (err) {
+        console.error(`[build:hostinger] Error rendering route ${route}:`, err.message);
+      }
+    }
+  } finally {
+    if (serverProc && typeof serverProc.kill === "function") {
+      try {
+        serverProc.kill();
+      } catch {}
+    }
+  }
+}
+
+await renderAllRoutes();
+
+// 7. Write production Apache / LiteSpeed .htaccess for Hostinger
+const htaccessPath = join(distDir, ".htaccess");
 const htaccessContent = `# ========================================================
 # Hostinger Apache / LiteSpeed Configuration
-# Omnicore Solutions - React SPA + PHP/MySQL Backend
+# Omnicore Solutions - Pre-rendered Static + PHP/MySQL
 # ========================================================
 
 <IfModule mod_rewrite.c>
@@ -84,11 +226,19 @@ const htaccessContent = `# =====================================================
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteRule ^ - [L]
 
-  # Redirect all other routes to React SPA index.html
+  # Check if route.html exists (e.g. /catalogue -> /catalogue.html)
+  RewriteCond %{DOCUMENT_ROOT}/$1.html -f
+  RewriteRule ^([^/]+)/?$ $1.html [L]
+
+  # Check if route/index.html exists (e.g. /services/mining -> /services/mining/index.html)
+  RewriteCond %{DOCUMENT_ROOT}/$1/index.html -f
+  RewriteRule ^(.*)/?$ $1/index.html [L]
+
+  # Fallback to index.html for client-side SPA routing
   RewriteRule . /index.html [L]
 </IfModule>
 
-# Caching & Compression for Fast Loading
+# Caching & Compression for High Performance
 <IfModule mod_deflate.c>
   AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json image/svg+xml
 </IfModule>
@@ -100,6 +250,6 @@ const htaccessContent = `# =====================================================
 </IfModule>
 `;
 
-writeFileSync(join(distDir, ".htaccess"), htaccessContent, "utf8");
-
-console.log("[build:hostinger] Successfully prepared static deployment bundle with PHP API in ./dist/");
+writeFileSync(htaccessPath, htaccessContent, "utf8");
+console.log("[build:hostinger] Created production .htaccess");
+console.log("[build:hostinger] Successfully finished Hostinger build in ./dist/");

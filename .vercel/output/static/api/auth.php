@@ -53,7 +53,7 @@ if ($action === 'login' && $method === 'POST') {
     }
 
     // Default emergency fallback if DB not populated yet
-    if (($email === 'admin@omnicore.co.zw' || $email === 'admin') && $password === 'Admin123!') {
+    if (($email === 'admin@omnicore.co.zw' || $email === 'admin@omnisolutions.local' || $email === 'admin') && $password === 'Admin123!') {
         jsonResponse([
             'success' => true,
             'message' => 'Authenticated with primary administrative credentials',

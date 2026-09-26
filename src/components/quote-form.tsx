@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { services, whatsappUrl } from "@/data/site";
 import { WhatsAppBadge, WhatsAppIcon } from "@/components/ui/official-badges";
+import { addInboundLeadToCRM } from "@/lib/cms-store";
 
 const intents = ["Buy", "Hire", "Both", "General"] as const;
 
@@ -35,6 +36,15 @@ export function QuoteForm({ defaultService = "" }: QuoteFormProps) {
 
     try {
       localStorage.setItem("omnicore-last-quote", JSON.stringify(payload));
+      addInboundLeadToCRM({
+        name: payload.name,
+        phone: payload.phone,
+        email: payload.email,
+        service: payload.service,
+        intent: payload.intent,
+        message: payload.message,
+        location: payload.location,
+      });
     } catch {
       /* private mode */
     }

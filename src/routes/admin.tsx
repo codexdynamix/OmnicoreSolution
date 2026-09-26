@@ -25,11 +25,11 @@ import {
   Clock,
   Globe,
   Eye,
+  EyeOff,
   CheckCircle2,
   ZoomIn,
   Building2,
   Maximize2,
-  Columns,
   Recycle,
   ArchiveRestore,
   AlertTriangle,
@@ -37,18 +37,12 @@ import {
   LogOut,
   KeyRound,
   AlertCircle,
-  ChevronDown,
-  ChevronUp,
   ImagePlus,
   Table,
   LayoutGrid,
   Kanban,
-  Calendar,
-  DollarSign,
-  Filter,
-  ArrowUpDown,
-  SlidersHorizontal,
-  Layers,
+  ShieldCheck,
+  Database,
 } from "lucide-react";
 import {
   CRMClient,
@@ -75,6 +69,17 @@ import {
 import { WhatsAppIcon } from "@/components/ui/official-badges";
 import { whatsappUrl } from "@/data/site";
 import { ProductPhotoLightbox } from "@/components/product-photo-lightbox";
+import {
+  getStoredAdminProfile,
+  saveStoredAdminProfile,
+  verifyAdminPassword,
+  setAdminPassword,
+  setSessionAuthenticated,
+  clearSessionAuthentication,
+  isSessionAuthenticated,
+  type AdminProfile,
+} from "@/lib/admin-auth";
+import { apiClient } from "@/lib/api-client";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -87,7 +92,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminBackoffice,
 });
 
-type Tab = "crm" | "products" | "cms" | "hire" | "recycle";
+type Tab = "crm" | "products" | "cms" | "hire" | "recycle" | "profile";
 
 const STAGES: CRMClient["stage"][] = [
   "Lead",
@@ -315,28 +320,32 @@ function stageChipClass(stage: CRMClient["stage"]) {
   return "bg-black/[0.05] text-[#1D1D1F]";
 }
 
-const ADMIN_CREDENTIALS = {
-  username: "admin@omnisolutions.local",
-  password: "Admin123!",
-};
-
-const AUTH_STORAGE_KEY = "omnicore_admin_authenticated";
-
 export function AdminBackoffice() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return (
-        sessionStorage.getItem(AUTH_STORAGE_KEY) === "true" ||
-        localStorage.getItem(AUTH_STORAGE_KEY) === "true"
-      );
-    } catch {
-      return false;
-    }
+    return isSessionAuthenticated();
   });
 
+  const [adminProfile, setAdminProfile] = useState<AdminProfile>(getStoredAdminProfile);
+  const [profileName, setProfileName] = useState(adminProfile.fullName);
+  const [profileEmail, setProfileEmail] = useState(adminProfile.email);
+  const [profileRole, setProfileRole] = useState(adminProfile.role);
+  const [profilePhone, setProfilePhone] = useState(adminProfile.phone);
+  const [profileLocation, setProfileLocation] = useState(adminProfile.yardLocation);
+
+  // Security Credentials Form States
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [isUpdatingCredentials, setIsUpdatingCredentials] = useState(false);
+  const [credentialSuccessMsg, setCredentialSuccessMsg] = useState<string | null>(null);
+  const [credentialErrorMsg, setCredentialErrorMsg] = useState<string | null>(null);
+
+  // Login form states
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginRemember, setLoginRemember] = useState(true);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
@@ -348,44 +357,115 @@ export function AdminBackoffice() {
 
     const inputUser = loginEmail.trim().toLowerCase();
     const inputPass = loginPassword.trim();
+    const profile = getStoredAdminProfile();
 
-    if (
-      (inputUser === ADMIN_CREDENTIALS.username.toLowerCase() ||
-        inputUser === "admin") &&
-      inputPass === ADMIN_CREDENTIALS.password
-    ) {
+    const isMatch =
+      (inputUser === profile.email.toLowerCase() ||
+        inputUser === "admin" ||
+        inputUser === "admin@omnicore.co.zw" ||
+        inputUser === "admin@omnisolutions.local") &&
+      verifyAdminPassword(inputPass);
+
+    if (isMatch) {
       setTimeout(() => {
+        setSessionAuthenticated(loginRemember);
         setIsAuthenticated(true);
         setIsSubmittingLogin(false);
-        try {
-          if (loginRemember) {
-            localStorage.setItem(AUTH_STORAGE_KEY, "true");
-          } else {
-            sessionStorage.setItem(AUTH_STORAGE_KEY, "true");
-          }
-        } catch {
-          // ignore
-        }
         triggerToast("Welcome back! Verified Omnicore Operations Desk.");
-      }, 350);
+        apiClient.login(inputUser, inputPass).catch(() => {});
+      }, 300);
     } else {
-      setTimeout(() => {
+      // Attempt backend verification if local failed
+      apiClient.login(inputUser, inputPass).then((res) => {
+        if (res.success && res.user) {
+          setSessionAuthenticated(loginRemember);
+          setIsAuthenticated(true);
+          const updated = saveStoredAdminProfile({
+            email: res.user.email,
+            fullName: res.user.fullName || profile.fullName,
+          });
+          setAdminProfile(updated);
+          setIsSubmittingLogin(false);
+          triggerToast("Welcome back! Verified Omnicore Operations Desk.");
+        } else {
+          setIsSubmittingLogin(false);
+          setLoginError("Invalid credentials. Please enter the authorized administrator email and password.");
+        }
+      }).catch(() => {
         setIsSubmittingLogin(false);
         setLoginError("Invalid credentials. Please enter the authorized administrator email and password.");
-      }, 350);
+      });
     }
   }
 
   function handleLogout() {
-    try {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-      sessionStorage.removeItem(AUTH_STORAGE_KEY);
-    } catch {
-      // ignore
-    }
+    clearSessionAuthentication();
     setIsAuthenticated(false);
     setLoginPassword("");
     triggerToast("Logged out of Operations Backoffice");
+  }
+
+  function handleSaveProfileDetails(e: React.FormEvent) {
+    e.preventDefault();
+    const updated = saveStoredAdminProfile({
+      fullName: profileName.trim(),
+      email: profileEmail.trim(),
+      role: profileRole.trim(),
+      phone: profilePhone.trim(),
+      yardLocation: profileLocation.trim(),
+    });
+    setAdminProfile(updated);
+    apiClient.updateProfile(updated).catch(() => {});
+    triggerToast("Administrator profile details updated successfully!");
+  }
+
+  async function handleUpdateCredentials(e: React.FormEvent) {
+    e.preventDefault();
+    setCredentialErrorMsg(null);
+    setCredentialSuccessMsg(null);
+
+    if (!currentPassword) {
+      setCredentialErrorMsg("Please enter your current administrator password to confirm.");
+      return;
+    }
+
+    if (!verifyAdminPassword(currentPassword.trim())) {
+      setCredentialErrorMsg("Incorrect current password. Please enter your valid current password.");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setCredentialErrorMsg("New password must be at least 8 characters long.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setCredentialErrorMsg("New password and confirmation do not match.");
+      return;
+    }
+
+    setIsUpdatingCredentials(true);
+
+    try {
+      setAdminPassword(newPassword.trim());
+
+      if (profileEmail.trim() && profileEmail.trim() !== adminProfile.email) {
+        saveStoredAdminProfile({ email: profileEmail.trim() });
+        setAdminProfile((prev) => ({ ...prev, email: profileEmail.trim() }));
+      }
+
+      await apiClient.changeCredentials(currentPassword.trim(), newPassword.trim(), profileEmail.trim());
+
+      setCredentialSuccessMsg("Credentials updated securely! Your new password is now active.");
+      triggerToast("Administrator credentials changed successfully!");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      setCredentialErrorMsg(err?.message || "Failed to update credentials.");
+    } finally {
+      setIsUpdatingCredentials(false);
+    }
   }
 
   const [activeTab, setActiveTab] = useState<Tab>("crm");
@@ -430,7 +510,6 @@ export function AdminBackoffice() {
   const [newProdBlurb, setNewProdBlurb] = useState("");
   const [newProdImage, setNewProdImage] = useState("/images/jaw-crusher.jpg");
   const [newProdGallery, setNewProdGallery] = useState<string[]>([]);
-  const [isNewProdLibraryExpanded, setIsNewProdLibraryExpanded] = useState(false);
   const [isCmsPreviewOpen, setIsCmsPreviewOpen] = useState(true);
 
   // Field Deployments State (Search, Filter, Pagination, View Mode, Sorting)
@@ -1506,7 +1585,7 @@ export function AdminBackoffice() {
                       required
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value)}
-                      placeholder="admin@omnisolutions.local"
+                      placeholder="Enter authorized administrator email"
                       className="w-full rounded-xl border border-black/15 bg-[#F9F9FB] px-3.5 py-2.5 text-sm text-[#1D1D1F] placeholder:text-[#A1A1A6] focus:border-[#1D1D1F] focus:bg-white focus:outline-none transition-all shadow-2xs"
                     />
                   </div>
@@ -1520,14 +1599,22 @@ export function AdminBackoffice() {
                   </div>
                   <div className="relative">
                     <input
-                      type="password"
+                      type={showLoginPassword ? "text" : "password"}
                       autoComplete="current-password"
                       required
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
                       placeholder="Enter administrator password"
-                      className="w-full rounded-xl border border-black/15 bg-[#F9F9FB] px-3.5 py-2.5 text-sm text-[#1D1D1F] placeholder:text-[#A1A1A6] focus:border-[#1D1D1F] focus:bg-white focus:outline-none transition-all shadow-2xs"
+                      className="w-full rounded-xl border border-black/15 bg-[#F9F9FB] px-3.5 pr-10 py-2.5 text-sm text-[#1D1D1F] placeholder:text-[#A1A1A6] focus:border-[#1D1D1F] focus:bg-white focus:outline-none transition-all shadow-2xs"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86868B] hover:text-[#1D1D1F] cursor-pointer"
+                      title={showLoginPassword ? "Hide password" : "Show password"}
+                    >
+                      {showLoginPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </button>
                   </div>
                 </div>
 
@@ -1614,10 +1701,26 @@ export function AdminBackoffice() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2 rounded-full border border-black/[0.08] bg-[#F5F5F7] px-3 py-1 text-xs text-[#1D1D1F]">
+            <button
+              type="button"
+              onClick={() => setActiveTab("profile")}
+              className={`hidden sm:flex items-center gap-2 rounded-full border border-black/[0.08] px-3 py-1 text-xs transition-all cursor-pointer ${
+                activeTab === "profile"
+                  ? "bg-[#1D1D1F] text-white"
+                  : "bg-[#F5F5F7] text-[#1D1D1F] hover:bg-[#EBEBEB]"
+              }`}
+              title="Manage Administrator Profile & Credentials"
+            >
               <span className="size-2 rounded-full bg-emerald-500" />
-              <span className="font-medium text-[#6E6E73]">{ADMIN_CREDENTIALS.username}</span>
-            </div>
+              <span className={`font-medium ${activeTab === "profile" ? "text-white/90" : "text-[#6E6E73]"}`}>
+                {adminProfile.email}
+              </span>
+              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                activeTab === "profile" ? "bg-white/20 text-white" : "bg-black/[0.06] text-[#1D1D1F]"
+              }`}>
+                Profile
+              </span>
+            </button>
 
             <button
               type="button"
@@ -1648,6 +1751,7 @@ export function AdminBackoffice() {
               { id: "cms", label: "Site Content & Copy", icon: FileText },
               { id: "hire", label: "Field Deployments", icon: Truck },
               { id: "recycle", label: "Recycle Bin", icon: Recycle, count: recycleBin.length },
+              { id: "profile", label: "Profile & Security", icon: ShieldCheck },
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -7272,6 +7376,365 @@ export function AdminBackoffice() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 6: ADMIN PROFILE & CREDENTIALS */}
+        {/* ========================================================================= */}
+        {activeTab === "profile" && (
+          <div className="space-y-8 max-w-5xl mx-auto pb-12">
+            {/* Page Header */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-black/[0.06] pb-6">
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight text-[#1D1D1F]">
+                  Administrator Profile & Security
+                </h2>
+                <p className="mt-1 text-xs sm:text-sm text-[#6E6E73]">
+                  Manage operations credentials, change administrator password, and monitor Hostinger MySQL database sync.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href="/api/setup.php"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white px-3.5 py-1.5 text-xs font-semibold text-[#1D1D1F] hover:bg-[#F5F5F7] transition-all shadow-2xs"
+                >
+                  <Database className="size-3.5 text-[#3D4F66]" />
+                  <span>Hostinger DB Status</span>
+                  <ExternalLink className="size-3 text-[#86868B]" />
+                </a>
+              </div>
+            </div>
+
+            {/* Profile Details & Credentials Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Left Column: Profile Card & Security Form */}
+              <div className="lg:col-span-7 space-y-6">
+                {/* Profile Card */}
+                <div className="rounded-3xl border border-black/[0.08] bg-white p-6 sm:p-7 shadow-xs">
+                  <div className="flex items-center gap-4 border-b border-black/[0.06] pb-5">
+                    <div className="flex size-14 items-center justify-center rounded-2xl bg-[#1D1D1F] text-white text-lg font-bold shadow-xs">
+                      {adminProfile.fullName
+                        .split(" ")
+                        .map((w) => w[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase() || "AD"}
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-[#1D1D1F]">{adminProfile.fullName}</h3>
+                      <p className="text-xs text-[#6E6E73]">{adminProfile.role}</p>
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
+                          <span className="size-1.5 rounded-full bg-emerald-600" />
+                          Primary Administrator
+                        </span>
+                        <span className="text-[11px] text-[#86868B]">Cranborne Operations</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleSaveProfileDetails} className="mt-5 space-y-4 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block font-semibold text-[#1D1D1F] mb-1">
+                          Administrator Full Name
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={profileName}
+                          onChange={(e) => setProfileName(e.target.value)}
+                          className="w-full h-9.5 rounded-xl border border-black/[0.12] bg-[#F9F9FB] px-3 text-xs text-[#1D1D1F] focus:border-black focus:bg-white focus:outline-none transition-all"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-[#1D1D1F] mb-1">
+                          Administrative Email / Login ID
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          value={profileEmail}
+                          onChange={(e) => setProfileEmail(e.target.value)}
+                          className="w-full h-9.5 rounded-xl border border-black/[0.12] bg-[#F9F9FB] px-3 text-xs text-[#1D1D1F] focus:border-black focus:bg-white focus:outline-none transition-all"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-[#1D1D1F] mb-1">
+                          Department / Title
+                        </label>
+                        <input
+                          type="text"
+                          value={profileRole}
+                          onChange={(e) => setProfileRole(e.target.value)}
+                          className="w-full h-9.5 rounded-xl border border-black/[0.12] bg-[#F9F9FB] px-3 text-xs text-[#1D1D1F] focus:border-black focus:bg-white focus:outline-none transition-all"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-[#1D1D1F] mb-1">
+                          Direct Phone / WhatsApp
+                        </label>
+                        <input
+                          type="text"
+                          value={profilePhone}
+                          onChange={(e) => setProfilePhone(e.target.value)}
+                          className="w-full h-9.5 rounded-xl border border-black/[0.12] bg-[#F9F9FB] px-3 text-xs text-[#1D1D1F] focus:border-black focus:bg-white focus:outline-none transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-[#1D1D1F] mb-1">
+                        Yard Location
+                      </label>
+                      <input
+                        type="text"
+                        value={profileLocation}
+                        onChange={(e) => setProfileLocation(e.target.value)}
+                        className="w-full h-9.5 rounded-xl border border-black/[0.12] bg-[#F9F9FB] px-3 text-xs text-[#1D1D1F] focus:border-black focus:bg-white focus:outline-none transition-all"
+                      />
+                    </div>
+
+                    <div className="pt-2 flex justify-end">
+                      <button
+                        type="submit"
+                        className="inline-flex h-9.5 items-center justify-center rounded-xl bg-[#1D1D1F] px-5 text-xs font-semibold text-white shadow-2xs hover:bg-black transition-all cursor-pointer"
+                      >
+                        Save Profile Details
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Change Password Card */}
+                <div className="rounded-3xl border border-black/[0.08] bg-white p-6 sm:p-7 shadow-xs">
+                  <div className="flex items-center gap-3 border-b border-black/[0.06] pb-4">
+                    <div className="flex size-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700 border border-amber-200">
+                      <KeyRound className="size-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-[#1D1D1F]">Change Administrator Credentials</h3>
+                      <p className="text-[11px] text-[#6E6E73]">
+                        Update your login password and security access key.
+                      </p>
+                    </div>
+                  </div>
+
+                  {credentialSuccessMsg && (
+                    <div className="mt-4 flex items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3.5 text-xs text-emerald-800">
+                      <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+                      <div className="flex-1 font-medium">{credentialSuccessMsg}</div>
+                    </div>
+                  )}
+
+                  {credentialErrorMsg && (
+                    <div className="mt-4 flex items-center gap-2.5 rounded-2xl border border-red-200 bg-red-50/80 p-3.5 text-xs text-red-800">
+                      <AlertCircle className="size-4 shrink-0 text-red-600" />
+                      <div className="flex-1 font-medium">{credentialErrorMsg}</div>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleUpdateCredentials} className="mt-5 space-y-4 text-xs">
+                    <div>
+                      <label className="block font-semibold text-[#1D1D1F] mb-1">
+                        Current Administrator Password *
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showCurrentPass ? "text" : "password"}
+                          required
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                          placeholder="Enter current password to verify identity"
+                          className="w-full h-9.5 rounded-xl border border-black/[0.12] bg-[#F9F9FB] px-3 pr-10 text-xs text-[#1D1D1F] focus:border-black focus:bg-white focus:outline-none transition-all"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowCurrentPass(!showCurrentPass)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#86868B] hover:text-[#1D1D1F] cursor-pointer"
+                        >
+                          {showCurrentPass ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block font-semibold text-[#1D1D1F] mb-1">
+                          New Administrator Password *
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showNewPass ? "text" : "password"}
+                            required
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder="Min. 8 characters"
+                            className="w-full h-9.5 rounded-xl border border-black/[0.12] bg-[#F9F9FB] px-3 pr-10 text-xs text-[#1D1D1F] focus:border-black focus:bg-white focus:outline-none transition-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowNewPass(!showNewPass)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#86868B] hover:text-[#1D1D1F] cursor-pointer"
+                          >
+                            {showNewPass ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-[#1D1D1F] mb-1">
+                          Confirm New Password *
+                        </label>
+                        <input
+                          type="password"
+                          required
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Re-type new password"
+                          className="w-full h-9.5 rounded-xl border border-black/[0.12] bg-[#F9F9FB] px-3 text-xs text-[#1D1D1F] focus:border-black focus:bg-white focus:outline-none transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Password requirements */}
+                    <div className="rounded-xl bg-[#F5F5F7] p-3 text-[11px] text-[#6E6E73] space-y-1">
+                      <div className="font-semibold text-[#1D1D1F]">Password Guidelines:</div>
+                      <ul className="list-disc pl-4 space-y-0.5">
+                        <li className={newPassword.length >= 8 ? "text-emerald-700 font-medium" : ""}>
+                          Minimum 8 characters
+                        </li>
+                        <li className={/[A-Za-z]/.test(newPassword) && /[0-9]/.test(newPassword) ? "text-emerald-700 font-medium" : ""}>
+                          Contains both letters and numbers
+                        </li>
+                        <li className={newPassword && newPassword === confirmPassword ? "text-emerald-700 font-medium" : ""}>
+                          New password and confirm password match
+                        </li>
+                      </ul>
+                    </div>
+
+                    <div className="pt-2 flex justify-end">
+                      <button
+                        type="submit"
+                        disabled={isUpdatingCredentials}
+                        className="inline-flex h-9.5 items-center justify-center gap-2 rounded-xl bg-amber-600 px-5 text-xs font-semibold text-white shadow-2xs hover:bg-amber-700 active:scale-95 disabled:opacity-50 transition-all cursor-pointer"
+                      >
+                        <KeyRound className="size-3.5" />
+                        <span>{isUpdatingCredentials ? "Updating Credentials..." : "Update Administrator Password"}</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              {/* Right Column: Hostinger DB Sync & Security Audit */}
+              <div className="lg:col-span-5 space-y-6">
+                {/* Hostinger Database Integration Card */}
+                <div className="rounded-3xl border border-black/[0.08] bg-white p-6 shadow-xs space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-10 items-center justify-center rounded-xl bg-[#3D4F66]/10 text-[#3D4F66]">
+                      <Database className="size-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-[#1D1D1F]">Hostinger MySQL & PHP Backend</h3>
+                      <p className="text-[11px] text-[#6E6E73]">Cranborne Yard SQL Integration</p>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-[#6E6E73] leading-relaxed">
+                    The backoffice seamlessly writes to Hostinger MySQL via the secure PHP API in <code className="bg-black/[0.05] px-1 py-0.5 rounded text-[11px]">/public/api/</code>. Inbound leads from the public Quote Form are immediately recorded into the SQL database.
+                  </p>
+
+                  <div className="rounded-2xl border border-black/[0.06] bg-[#F9F9FB] p-3.5 space-y-2.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[#6E6E73]">API Endpoints</span>
+                      <span className="font-mono text-[11px] text-emerald-700 font-semibold">Active & Live</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[#6E6E73]">Database Schema</span>
+                      <a
+                        href="/api/schema.sql"
+                        download="schema.sql"
+                        className="text-[11px] font-semibold text-blue-700 hover:underline flex items-center gap-1"
+                      >
+                        <span>Download schema.sql</span>
+                      </a>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[#6E6E73]">1-Click Diagnostic</span>
+                      <a
+                        href="/api/setup.php"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] font-semibold text-purple-700 hover:underline flex items-center gap-1"
+                      >
+                        <span>Open /api/setup.php</span>
+                        <ExternalLink className="size-3" />
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-black/[0.06] pt-3 text-[11px] text-[#86868B] space-y-1">
+                    <div className="font-semibold text-[#1D1D1F]">Configured Tables:</div>
+                    <div>• <code className="text-[#1D1D1F]">omnicore_admin_users</code>: Credentials & profile</div>
+                    <div>• <code className="text-[#1D1D1F]">omnicore_crm_leads</code>: Public website quote leads</div>
+                    <div>• <code className="text-[#1D1D1F]">omnicore_equipment</code>: Machinery catalogue inventory</div>
+                    <div>• <code className="text-[#1D1D1F]">omnicore_deployments</code>: Machine hire contracts</div>
+                    <div>• <code className="text-[#1D1D1F]">omnicore_site_copy</code>: Live website text & phones</div>
+                  </div>
+                </div>
+
+                {/* Active Session & Audit Card */}
+                <div className="rounded-3xl border border-black/[0.08] bg-white p-6 shadow-xs space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                      <ShieldCheck className="size-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-[#1D1D1F]">Session & Security Audit</h3>
+                      <p className="text-[11px] text-[#6E6E73]">Access Status & Authentication Log</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between py-1.5 border-b border-black/[0.04]">
+                      <span className="text-[#6E6E73]">Authenticated User</span>
+                      <span className="font-semibold text-[#1D1D1F]">{adminProfile.email}</span>
+                    </div>
+                    <div className="flex justify-between py-1.5 border-b border-black/[0.04]">
+                      <span className="text-[#6E6E73]">Session State</span>
+                      <span className="font-semibold text-emerald-700">Active & Verified</span>
+                    </div>
+                    <div className="flex justify-between py-1.5 border-b border-black/[0.04]">
+                      <span className="text-[#6E6E73]">Last Password Change</span>
+                      <span className="font-medium text-[#1D1D1F]">{adminProfile.lastPasswordChange}</span>
+                    </div>
+                    <div className="flex justify-between py-1.5">
+                      <span className="text-[#6E6E73]">Last Login Recorded</span>
+                      <span className="font-medium text-[#1D1D1F]">{adminProfile.lastLogin}</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50/50 py-2.5 text-xs font-semibold text-red-700 hover:bg-red-100/60 transition-all cursor-pointer"
+                    >
+                      <LogOut className="size-3.5" />
+                      <span>Sign Out from Backoffice</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

@@ -1,4 +1,4 @@
-name: Deploy Compliant Bookkeeping SA to Hostinger
+name: Deploy Omnicore Solutions to Hostinger
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
 
 jobs:
   deploy:
+    name: Build & FTP Deploy to Hostinger
     runs-on: ubuntu-latest
 
     steps:
@@ -17,11 +18,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: "npm"
 
       - name: Install dependencies
         run: npm install
 
-      - name: Build static website for Hostinger
+      - name: Build website & PHP API bundle for Hostinger
         run: npm run build:hostinger
 
       - name: Deploy website to Hostinger
@@ -31,5 +33,8 @@ jobs:
           username: ${{ secrets.HOSTINGER_USERNAME }}
           password: ${{ secrets.HOSTINGER_PASSWORD }}
           local-dir: ./dist/
-          server-dir: ${{ secrets.HOSTINGER_SERVER_DIR || 'public_html/' }}
+          # In Hostinger, domain-specific FTP accounts land directly inside public_html/.
+          # Using './' prevents creating a redundant nested 'public_html/public_html/' folder.
+          # If your FTP account lands in the parent directory, set the repository secret HOSTINGER_SERVER_DIR='public_html/'.
+          server-dir: ${{ secrets.HOSTINGER_SERVER_DIR || './' }}
           security: loose

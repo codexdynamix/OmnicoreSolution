@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { equipment as initialEquipment, site as initialSite, type Equipment } from "@/data/site";
+import { apiClient } from "@/lib/api-client";
 
 export type CRMClient = {
   id: string;
@@ -454,6 +455,64 @@ export function saveStoredCRMClients(clients: CRMClient[]) {
   } catch {
     // ignore
   }
+}
+
+export function addInboundLeadToCRM(lead: {
+  name: string;
+  phone: string;
+  email?: string;
+  location?: string;
+  service?: string;
+  intent?: string;
+  message?: string;
+}) {
+  const current = getStoredCRMClients();
+  const id = `CRM-WEB-${Math.floor(1000 + Math.random() * 9000)}`;
+  const newClient: CRMClient = {
+    id,
+    name: lead.name || "Inbound Client",
+    organization: "Website Inbound Tender Request",
+    phone: lead.phone || "+263 ",
+    email: lead.email || "",
+    location: lead.location || "Harare",
+    province: "Harare",
+    service: lead.service || "Mining Equipment",
+    equipmentInterest: lead.message ? `${lead.service || "Plant"}: ${lead.message.slice(0, 50)}` : (lead.service || "General Inquiry"),
+    intent: (lead.intent === "Hire" ? "Hire" : lead.intent === "Both" ? "Both" : "Buy"),
+    stage: "Lead",
+    priority: "High",
+    dealValue: 12500,
+    dealValueDisplay: "$12,500",
+    lastContact: "Just Now",
+    nextFollowUp: "Today, 16:00",
+    notes: lead.message || "Submitted through website quote desk.",
+    timeline: [
+      {
+        date: "Today",
+        note: `Website quote requirement logged: ${lead.service || "Machinery"} (${lead.intent || "Buy"}). Message: "${lead.message || "Direct request"}"`,
+        author: "Web Desk Intake",
+      },
+    ],
+  };
+
+  const updated = [newClient, ...current];
+  saveStoredCRMClients(updated);
+
+  // Sync to PHP / MySQL backend
+  apiClient.submitLead({
+    id,
+    name: lead.name,
+    phone: lead.phone,
+    email: lead.email,
+    location: lead.location,
+    service: lead.service,
+    intent: lead.intent,
+    message: lead.message,
+    equipmentInterest: newClient.equipmentInterest,
+    priority: "High",
+    stage: "Lead",
+    dealValue: 12500,
+  }).catch(() => {});
 }
 
 export function getStoredEquipment(): ExtendedEquipment[] {

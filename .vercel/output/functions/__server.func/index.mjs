@@ -12,7 +12,6 @@ var install_page_default = "<!DOCTYPE html>\n<html lang=\"en\" class=\"device-de
 //#endregion
 //#region \0virtual:grok-og-identity
 var grokOgIdentity = { "site": {
-	"title": "Omnicore Solutions",
 	"card": "custom",
 	"image": "/og.jpg"
 } };
@@ -185,10 +184,6 @@ function ogCardPublicPath(cwd = process.cwd()) {
 	if (existsSync(join(cwd, "public/og.png"))) return "/og.png";
 	return "";
 }
-function detectCustomOgCard(cwd = process.cwd(), site = {}) {
-	if (ogCardPublicPath(cwd)) return true;
-	return siteHasCustomCard(site) || Boolean(String(site.image ?? "").trim());
-}
 /** Snapshot for Vite/Nitro to bake into the server bundle (Vercel has no workspace FS). */
 function snapshotOgIdentity(cwd = process.cwd()) {
 	const site = { ...readOgSite(cwd) };
@@ -211,13 +206,15 @@ function titleFromDocument(html) {
 	return match ? unescapeHtml(match[1]).trim() : "";
 }
 function resolveOgTitle(site = {}, appName = DEFAULT_APP_NAME, host = "", documentTitle = "") {
-	const fromSite = String(site.title ?? "").trim();
-	if (fromSite) return fromSite;
 	const fromDoc = String(documentTitle ?? "").trim();
 	if (fromDoc) return fromDoc;
+	const fromArg = String(appName ?? "").trim();
+	if (fromArg && fromArg !== "Grok App") return fromArg;
+	const fromSite = String(site.title ?? "").trim();
+	if (fromSite) return fromSite;
 	const fromHost = appNameFromHost(host);
 	if (fromHost && fromHost !== "Grok App") return fromHost;
-	return String(appName ?? "").trim() || "Grok App";
+	return fromArg || "Grok App";
 }
 function siteHasCustomCard(site = {}) {
 	return String(site.card ?? "").toLowerCase() === "custom";
@@ -228,7 +225,10 @@ function siteHasCustomCard(site = {}) {
 * Otherwise empty — caller emits the og.grok.me placeholder.
 */
 function resolveOgCardAsset(site = {}, cwd = process.cwd()) {
-	return ogCardPublicPath(cwd) || (detectCustomOgCard(cwd, site) ? String(site.image ?? "").trim() || "/og.jpg" : "");
+	const disk = ogCardPublicPath(cwd);
+	if (disk) return disk;
+	if (siteHasCustomCard(site) || Boolean(String(site.image ?? "").trim())) return String(site.image ?? "").trim() || "/og.jpg";
+	return "";
 }
 /** Stamp `card=custom` when public/og.jpg or public/og.png is on disk. */
 function applyCustomCardFromFs(site, cwd) {
@@ -284,7 +284,7 @@ function insertBeforeHeadClose(html, snippet) {
 }
 function normalizeHeadContext(ctx = {}) {
 	const cwd = ctx.cwd ?? process.cwd();
-	const site = applyCustomCardFromFs(ctx.site !== void 0 ? ctx.site : snapshotOgIdentity(cwd).site, cwd);
+	const site = ctx.site !== void 0 ? siteHasCustomCard(ctx.site) ? applyCustomCardFromFs(ctx.site, cwd) : ctx.site : applyCustomCardFromFs(snapshotOgIdentity(cwd).site, cwd);
 	return {
 		appName: resolveOgTitle(site, ctx.appName ?? "Grok App", ctx.host ?? ""),
 		projectId: ctx.projectId ?? readGrokProjectId(),

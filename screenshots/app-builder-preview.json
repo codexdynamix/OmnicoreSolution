@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Heavy Machinery & Plant Zimbabwe | Omnicore Solutions Harare",
+      "hasCanvas": false,
+      "bodyTextLen": 4314,
+      "bodyTextHash": "067d30ed5261a282f9fd43182e6f317b3b47f4a7297c08e6726e6495c8a30822",
+      "bodyTextPrefix": "Omnicore Services Catalogue Hire Projects Insights Contact Backo",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Heavy Machinery & Plant Zimbabwe | Omnicore Solutions Harare",
+      "hasCanvas": false,
+      "bodyTextLen": 4252,
+      "bodyTextHash": "6f6c53d537b7471d6816f3fcaee8835b18916db6d2389ec7f696e46a3584653a",
+      "bodyTextPrefix": "Omnicore Backoffice Get Quote Cranborne yard · 115 Chiremba Road",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}

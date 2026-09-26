@@ -70,9 +70,11 @@ import {
   DeploymentStatus,
   getStoredDeployments,
   saveStoredDeployments,
+  DEFAULT_DEPLOYMENTS,
 } from "@/lib/cms-store";
 import { WhatsAppIcon } from "@/components/ui/official-badges";
 import { whatsappUrl } from "@/data/site";
+import { ProductPhotoLightbox } from "@/components/product-photo-lightbox";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -428,7 +430,6 @@ export function AdminBackoffice() {
   const [newProdBlurb, setNewProdBlurb] = useState("");
   const [newProdImage, setNewProdImage] = useState("/images/jaw-crusher.jpg");
   const [newProdGallery, setNewProdGallery] = useState<string[]>([]);
-  const [isPhotoLibraryExpanded, setIsPhotoLibraryExpanded] = useState(false);
   const [isNewProdLibraryExpanded, setIsNewProdLibraryExpanded] = useState(false);
   const [isCmsPreviewOpen, setIsCmsPreviewOpen] = useState(true);
 
@@ -456,12 +457,184 @@ export function AdminBackoffice() {
   const [deployProvince, setDeployProvince] = useState("Harare");
   const [deployOperator, setDeployOperator] = useState("Wet Rate (With Certified Operator)");
   const [deployRate, setDeployRate] = useState("$480 / day");
+  const [deployStatus, setDeployStatus] = useState<DeploymentStatus>("Active on Site");
   const [deployStartDate, setDeployStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [deployReturnDate, setDeployReturnDate] = useState("");
   const [deployContractRef, setDeployContractRef] = useState(`CNT-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`);
   const [deployContactPerson, setDeployContactPerson] = useState("");
   const [deployContactPhone, setDeployContactPhone] = useState("+263 ");
   const [deployNotes, setDeployNotes] = useState("");
+
+  function resetDeployForm() {
+    setDeployMachineId("");
+    setDeployPlant("");
+    setDeployCategory("hire");
+    setDeploySku(`OMNI-HIR-${Math.floor(100 + Math.random() * 900)}`);
+    setDeployImage("/images/cat-excavator.jpg");
+    setDeployClient("");
+    setDeploySite("");
+    setDeployProvince("Harare");
+    setDeployOperator("Wet Rate (With Certified Operator)");
+    setDeployRate("$480 / day");
+    setDeployStatus("Active on Site");
+    setDeployStartDate(new Date().toISOString().slice(0, 10));
+    setDeployReturnDate("");
+    setDeployContractRef(`CNT-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`);
+    setDeployContactPerson("");
+    setDeployContactPhone("+263 ");
+    setDeployNotes("");
+  }
+
+  function openCreateDeployment() {
+    setEditingDeployment(null);
+    resetDeployForm();
+    setShowDeployModal(true);
+  }
+
+  function openEditDeployment(dep: DeploymentRecord) {
+    setEditingDeployment(dep);
+    setDeployMachineId(dep.productId || "");
+    setDeployPlant(dep.plant);
+    setDeployCategory(dep.category);
+    setDeploySku(dep.sku || "");
+    setDeployImage(dep.image || "/images/cat-excavator.jpg");
+    setDeployClient(dep.client);
+    setDeploySite(dep.site);
+    setDeployProvince(dep.province);
+    setDeployOperator(dep.operator);
+    setDeployRate(dep.rate);
+    setDeployStatus(dep.status);
+    setDeployStartDate(dep.startDate);
+    setDeployReturnDate(dep.scheduledReturn);
+    setDeployContractRef(dep.contractRef);
+    setDeployContactPerson(dep.contactPerson || "");
+    setDeployContactPhone(dep.contactPhone || "+263 ");
+    setDeployNotes(dep.notes || "");
+    setShowDeployModal(true);
+  }
+
+  function handleSaveDeployment(e: React.FormEvent) {
+    e.preventDefault();
+    if (!deployPlant.trim()) {
+      triggerToast("Please provide machine or plant name");
+      return;
+    }
+    if (!deployClient.trim()) {
+      triggerToast("Please provide client name");
+      return;
+    }
+
+    const numericMatch = deployRate.replace(/[^0-9.]/g, "");
+    const numericDailyRate = parseFloat(numericMatch) || 0;
+
+    if (editingDeployment) {
+      const updated: DeploymentRecord = {
+        ...editingDeployment,
+        productId: deployMachineId || editingDeployment.productId,
+        plant: deployPlant.trim(),
+        category: deployCategory,
+        sku: deploySku.trim() || editingDeployment.sku,
+        image: deployImage || editingDeployment.image,
+        client: deployClient.trim(),
+        site: deploySite.trim() || editingDeployment.site,
+        province: deployProvince,
+        operator: deployOperator,
+        rate: deployRate.trim(),
+        dailyRateUSD: numericDailyRate || editingDeployment.dailyRateUSD,
+        status: deployStatus,
+        startDate: deployStartDate,
+        scheduledReturn: deployReturnDate || editingDeployment.scheduledReturn,
+        contractRef: deployContractRef.trim() || editingDeployment.contractRef,
+        contactPerson: deployContactPerson.trim(),
+        contactPhone: deployContactPhone.trim(),
+        notes: deployNotes.trim(),
+      };
+      const nextList = deploymentsList.map((d) => (d.id === editingDeployment.id ? updated : d));
+      setDeploymentsList(nextList);
+      saveStoredDeployments(nextList);
+      triggerToast(`Updated ${updated.plant} (${updated.id})`);
+    } else {
+      const nextNum = deploymentsList.length + 1;
+      const newId = `DEP-${String(nextNum).padStart(2, "0")}`;
+      const newRecord: DeploymentRecord = {
+        id: newId,
+        productId: deployMachineId || undefined,
+        plant: deployPlant.trim(),
+        category: deployCategory,
+        sku: deploySku.trim() || `OMNI-HIR-${Math.floor(100 + Math.random() * 900)}`,
+        image: deployImage || "/images/cat-excavator.jpg",
+        client: deployClient.trim(),
+        site: deploySite.trim() || "Harare Metro",
+        province: deployProvince,
+        operator: deployOperator,
+        rate: deployRate.trim() || "$480 / day",
+        dailyRateUSD: numericDailyRate || 480,
+        status: deployStatus,
+        startDate: deployStartDate || new Date().toISOString().slice(0, 10),
+        scheduledReturn: deployReturnDate || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+        contractRef: deployContractRef.trim() || `CNT-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+        contactPerson: deployContactPerson.trim(),
+        contactPhone: deployContactPhone.trim(),
+        notes: deployNotes.trim(),
+      };
+      const nextList = [newRecord, ...deploymentsList];
+      setDeploymentsList(nextList);
+      saveStoredDeployments(nextList);
+      triggerToast(`Created deployment ${newRecord.id} for ${newRecord.plant}`);
+    }
+
+    setShowDeployModal(false);
+    setEditingDeployment(null);
+    resetDeployForm();
+  }
+
+  function handleDeleteDeployment(id: string) {
+    const target = deploymentsList.find((d) => d.id === id);
+    if (!target) return;
+    setPendingAction({
+      type: "delete-deployment",
+      id,
+      name: `${target.plant} (${target.client})`,
+    });
+  }
+
+  function handleConfirmDeleteDeployment(id: string) {
+    const nextList = deploymentsList.filter((d) => d.id !== id);
+    setDeploymentsList(nextList);
+    saveStoredDeployments(nextList);
+    triggerToast(`Deleted deployment ${id}`);
+  }
+
+  function handleQuickStatusChange(id: string, newStatus: DeploymentStatus) {
+    const nextList = deploymentsList.map((d) => (d.id === id ? { ...d, status: newStatus } : d));
+    setDeploymentsList(nextList);
+    saveStoredDeployments(nextList);
+    triggerToast(`Deployment ${id} status set to "${newStatus}"`);
+  }
+
+  function handleResetDefaultDeployments() {
+    setDeploymentsList(DEFAULT_DEPLOYMENTS);
+    saveStoredDeployments(DEFAULT_DEPLOYMENTS);
+    triggerToast("Reset field deployments to factory defaults");
+  }
+
+  function handleDeployImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const f = files[0];
+    if (f.size > 12 * 1024 * 1024) {
+      triggerToast("Image file is too large (>12MB)");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setDeployImage(reader.result);
+        triggerToast("Machine image attached");
+      }
+    };
+    reader.readAsDataURL(f);
+  }
 
   function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>, isEditing = false, asGalleryItem = false) {
     const files = e.target.files;
@@ -617,11 +790,36 @@ export function AdminBackoffice() {
   const [cmsPreviewTab, setCmsPreviewTab] = useState<"hero" | "yard" | "whatsapp" | "about" | "divisions" | "footer">("hero");
   const [cmsLayoutMode, setCmsLayoutMode] = useState<"full" | "split">("full");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [presetCategoryFilter, setPresetCategoryFilter] = useState<string>("all");
   const [newPresetCategoryFilter, setNewPresetCategoryFilter] = useState<string>("all");
-  const [photoPresetSearch, setPhotoPresetSearch] = useState("");
   const [newPhotoPresetSearch, setNewPhotoPresetSearch] = useState("");
   const [zoomedPhoto, setZoomedPhoto] = useState<{ src: string; title: string } | null>(null);
+  const [productLightbox, setProductLightbox] = useState<{
+    isOpen: boolean;
+    title: string;
+    category?: string;
+    spec?: string;
+    price?: string;
+    sku?: string;
+    images: string[];
+    initialIndex?: number;
+  } | null>(null);
+
+  function openProductLightbox(
+    item: { name: string; category?: string; spec?: string; price?: string; sku?: string; id?: string; image?: string; gallery?: string[] },
+    initialIndex: number = 0
+  ) {
+    const images = [item.image, ...(item.gallery || [])].filter((img): img is string => Boolean(img));
+    setProductLightbox({
+      isOpen: true,
+      title: item.name,
+      category: item.category,
+      spec: item.spec,
+      price: item.price,
+      sku: item.sku || item.id,
+      images: images.length > 0 ? images : ["/images/hero.jpg"],
+      initialIndex,
+    });
+  }
 
   // Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -636,6 +834,7 @@ export function AdminBackoffice() {
   const [pendingAction, setPendingAction] = useState<
     | { type: "delete-clients"; ids: string[] }
     | { type: "delete-products"; ids: string[] }
+    | { type: "delete-deployment"; id: string; name: string }
     | { type: "restore"; binIds: string[] }
     | { type: "destroy"; binIds: string[] }
     | { type: "empty-bin" }
@@ -650,16 +849,19 @@ export function AdminBackoffice() {
       setSiteCopy(getStoredSiteCopy());
       setCmsForm(getStoredSiteCopy());
       setRecycleBin(getStoredRecycleBin());
+      setDeploymentsList(getStoredDeployments());
     }
     window.addEventListener("omnicore-crm-updated", handleStorageSync);
     window.addEventListener("omnicore-equipment-updated", handleStorageSync);
     window.addEventListener("omnicore-copy-updated", handleStorageSync);
     window.addEventListener("omnicore-recycle-updated", handleStorageSync);
+    window.addEventListener("omnicore-deployments-updated", handleStorageSync);
     return () => {
       window.removeEventListener("omnicore-crm-updated", handleStorageSync);
       window.removeEventListener("omnicore-equipment-updated", handleStorageSync);
       window.removeEventListener("omnicore-copy-updated", handleStorageSync);
       window.removeEventListener("omnicore-recycle-updated", handleStorageSync);
+      window.removeEventListener("omnicore-deployments-updated", handleStorageSync);
     };
   }, []);
 
@@ -886,6 +1088,7 @@ export function AdminBackoffice() {
     if (!pendingAction) return;
     if (pendingAction.type === "delete-clients") moveClientsToBin(pendingAction.ids);
     else if (pendingAction.type === "delete-products") moveProductsToBin(pendingAction.ids);
+    else if (pendingAction.type === "delete-deployment") handleConfirmDeleteDeployment(pendingAction.id);
     else if (pendingAction.type === "restore") restoreBinItems(pendingAction.binIds);
     else if (pendingAction.type === "destroy") destroyBinItems(pendingAction.binIds);
     else if (pendingAction.type === "empty-bin") emptyRecycleBin();
@@ -1020,6 +1223,14 @@ export function AdminBackoffice() {
         tone: "danger" as const,
       };
     }
+    if (pendingAction.type === "delete-deployment") {
+      return {
+        title: `Delete deployment ${pendingAction.id}?`,
+        body: `Are you sure you want to remove "${pendingAction.name}" from active field deployments?`,
+        confirmLabel: "Delete deployment",
+        tone: "danger" as const,
+      };
+    }
     if (pendingAction.type === "restore") {
       const n = pendingAction.binIds.length;
       return {
@@ -1067,6 +1278,86 @@ export function AdminBackoffice() {
   useEffect(() => {
     setProductPage(1);
   }, [productSearch, productCategoryFilter, productPageSize]);
+
+  // Deployment computations (Search, Filter, Sort, Pagination, Metrics)
+  const filteredDeployments = useMemo(() => {
+    return deploymentsList
+      .filter((d) => {
+        const q = deploymentSearch.trim().toLowerCase();
+        const matchesSearch =
+          !q ||
+          d.id.toLowerCase().includes(q) ||
+          d.plant.toLowerCase().includes(q) ||
+          d.client.toLowerCase().includes(q) ||
+          d.site.toLowerCase().includes(q) ||
+          d.province.toLowerCase().includes(q) ||
+          d.operator.toLowerCase().includes(q) ||
+          d.contractRef.toLowerCase().includes(q) ||
+          (d.contactPerson && d.contactPerson.toLowerCase().includes(q)) ||
+          (d.notes && d.notes.toLowerCase().includes(q));
+
+        const matchesStatus = deploymentStatusFilter === "all" || d.status === deploymentStatusFilter;
+        const matchesProvince = deploymentProvinceFilter === "all" || d.province === deploymentProvinceFilter;
+        const matchesCategory = deploymentCategoryFilter === "all" || d.category === deploymentCategoryFilter;
+
+        return matchesSearch && matchesStatus && matchesProvince && matchesCategory;
+      })
+      .sort((a, b) => {
+        if (deploymentSortBy === "return-soon") {
+          return new Date(a.scheduledReturn).getTime() - new Date(b.scheduledReturn).getTime();
+        }
+        if (deploymentSortBy === "newest") {
+          return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
+        }
+        if (deploymentSortBy === "rate-high") {
+          return (b.dailyRateUSD || 0) - (a.dailyRateUSD || 0);
+        }
+        if (deploymentSortBy === "plant-az") {
+          return a.plant.localeCompare(b.plant);
+        }
+        return 0;
+      });
+  }, [
+    deploymentsList,
+    deploymentSearch,
+    deploymentStatusFilter,
+    deploymentProvinceFilter,
+    deploymentCategoryFilter,
+    deploymentSortBy,
+  ]);
+
+  const deploymentTotalPages = Math.max(1, Math.ceil(filteredDeployments.length / deploymentPageSize));
+  const paginatedDeployments = useMemo(() => {
+    if (deploymentPageSize >= 999) return filteredDeployments;
+    const start = (deploymentPage - 1) * deploymentPageSize;
+    return filteredDeployments.slice(start, start + deploymentPageSize);
+  }, [filteredDeployments, deploymentPage, deploymentPageSize]);
+
+  useEffect(() => {
+    setDeploymentPage(1);
+  }, [deploymentSearch, deploymentStatusFilter, deploymentProvinceFilter, deploymentCategoryFilter, deploymentPageSize]);
+
+  const deploymentMetrics = useMemo(() => {
+    const total = deploymentsList.length;
+    const activeOnSite = deploymentsList.filter((d) => d.status === "Active on Site").length;
+    const scheduled = deploymentsList.filter((d) => d.status === "Scheduled Mobilization").length;
+    const demobilizingOrService = deploymentsList.filter(
+      (d) => d.status === "Demobilizing / In Transit" || d.status === "Routine Service / Standby"
+    ).length;
+    const returnedYard = deploymentsList.filter((d) => d.status === "Returned to Cranborne Yard").length;
+    const totalDailyRunRate = deploymentsList
+      .filter((d) => d.status === "Active on Site")
+      .reduce((sum, d) => sum + (d.dailyRateUSD || 0), 0);
+
+    return {
+      total,
+      activeOnSite,
+      scheduled,
+      demobilizingOrService,
+      returnedYard,
+      totalDailyRunRate,
+    };
+  }, [deploymentsList]);
 
   const peekClient = peekClientId ? (clients.find((c) => c.id === peekClientId) ?? null) : null;
   const peekProduct = peekProductId
@@ -1278,49 +1569,27 @@ export function AdminBackoffice() {
       ) : (
         <>
 
-      {/* HD Machinery Photo Zoom Modal */}
+      {/* HD Machinery Photo Lightbox Modal for Large Screens */}
+      {productLightbox && (
+        <ProductPhotoLightbox
+          isOpen={productLightbox.isOpen}
+          onClose={() => setProductLightbox(null)}
+          title={productLightbox.title}
+          category={productLightbox.category}
+          spec={productLightbox.spec}
+          price={productLightbox.price}
+          sku={productLightbox.sku}
+          images={productLightbox.images}
+          initialIndex={productLightbox.initialIndex ?? 0}
+        />
+      )}
       {zoomedPhoto && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in"
-          onClick={() => setZoomedPhoto(null)}
-        >
-          <div
-            className="relative max-w-4xl w-full rounded-3xl overflow-hidden bg-black border border-white/10 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="relative max-h-[80vh] flex items-center justify-center bg-black/90">
-              <img
-                src={zoomedPhoto.src}
-                alt={zoomedPhoto.title}
-                className="max-h-[75vh] w-auto max-w-full object-contain mx-auto"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = "/images/hero.jpg";
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => setZoomedPhoto(null)}
-                className="absolute top-4 right-4 flex size-9 items-center justify-center rounded-full bg-black/60 text-white hover:bg-white hover:text-black transition-all"
-                title="Close"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-            <div className="flex items-center justify-between p-4 bg-[#1D1D1F] text-white border-t border-white/10">
-              <div>
-                <p className="font-semibold text-sm">{zoomedPhoto.title}</p>
-                <p className="text-xs text-white/60 font-mono mt-0.5">{zoomedPhoto.src}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setZoomedPhoto(null)}
-                className="rounded-full bg-white/15 px-4 py-1.5 text-xs font-medium text-white hover:bg-white/25 transition-all"
-              >
-                Close View
-              </button>
-            </div>
-          </div>
-        </div>
+        <ProductPhotoLightbox
+          isOpen={Boolean(zoomedPhoto)}
+          onClose={() => setZoomedPhoto(null)}
+          title={zoomedPhoto.title}
+          images={[zoomedPhoto.src]}
+        />
       )}
 
       {/* Top Apple Bar */}
@@ -2523,12 +2792,27 @@ export function AdminBackoffice() {
                         {/* Thumbnails row */}
                         <div className="flex flex-wrap items-center gap-3 p-3 rounded-2xl bg-[#F9F9FA] border border-black/[0.06]">
                           {/* Primary Photo Chip */}
-                          <div className="relative group/primary rounded-xl overflow-hidden border-2 border-[#1FA855] p-0.5 bg-white shadow-xs">
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => openProductLightbox(editingProduct, 0)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                openProductLightbox(editingProduct, 0);
+                              }
+                            }}
+                            className="relative group/primary rounded-xl overflow-hidden border-2 border-[#1FA855] p-0.5 bg-white shadow-xs cursor-pointer hover:border-black transition-all"
+                            title="Click to preview primary photo in large screen"
+                          >
                             <img
                               src={editingProduct.image || "/images/jaw-crusher.jpg"}
                               alt="Primary"
                               className="size-16 sm:size-20 rounded-lg object-cover"
                             />
+                            <div className="absolute inset-0 bg-black/35 opacity-0 group-hover/primary:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
+                              <ZoomIn className="size-4.5 text-white drop-shadow-md" />
+                            </div>
                             <span className="absolute bottom-1 inset-x-1 rounded bg-[#1FA855] text-white text-[9px] font-bold text-center py-0.5 shadow-xs">
                               Primary
                             </span>
@@ -2545,15 +2829,25 @@ export function AdminBackoffice() {
                                 alt={`Gallery ${idx + 1}`}
                                 className="size-16 sm:size-20 rounded-lg object-cover"
                               />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-between p-1 rounded-lg">
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveGalleryPhoto(idx, true)}
-                                  className="self-end rounded-full bg-red-600 p-1 text-white hover:bg-red-700 shadow-xs"
-                                  title="Remove photo"
-                                >
-                                  <X className="size-2.5" />
-                                </button>
+                              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-between p-1 rounded-lg">
+                                <div className="flex items-center justify-between w-full">
+                                  <button
+                                    type="button"
+                                    onClick={() => openProductLightbox(editingProduct, idx + 1)}
+                                    className="rounded-full bg-black/75 p-1 text-white hover:bg-white hover:text-black shadow-xs cursor-pointer transition-colors"
+                                    title="View this photo on large screen"
+                                  >
+                                    <ZoomIn className="size-2.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveGalleryPhoto(idx, true)}
+                                    className="rounded-full bg-red-600 p-1 text-white hover:bg-red-700 shadow-xs cursor-pointer"
+                                    title="Remove photo"
+                                  >
+                                    <X className="size-2.5" />
+                                  </button>
+                                </div>
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -2567,7 +2861,7 @@ export function AdminBackoffice() {
                                     });
                                     triggerToast("Swapped as primary photo");
                                   }}
-                                  className="w-full rounded bg-white/90 text-[#1D1D1F] text-[9px] font-semibold py-0.5 hover:bg-white"
+                                  className="w-full rounded bg-white/95 text-[#1D1D1F] text-[9px] font-semibold py-0.5 hover:bg-white cursor-pointer"
                                 >
                                   Make Primary
                                 </button>
@@ -2593,7 +2887,19 @@ export function AdminBackoffice() {
                       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
                         {/* Prominent High-Definition Preview Canvas (7 cols) */}
                         <div className="lg:col-span-7 space-y-3">
-                          <div className="relative w-full h-64 sm:h-76 md:h-84 rounded-2xl overflow-hidden bg-black/[0.05] border border-black/[0.08] shadow-sm group">
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => openProductLightbox(editingProduct, 0)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                openProductLightbox(editingProduct, 0);
+                              }
+                            }}
+                            className="relative w-full h-64 sm:h-76 md:h-84 rounded-2xl overflow-hidden bg-black/[0.05] border border-black/[0.08] shadow-sm group cursor-pointer"
+                            title="Click to open photos in full-screen large preview"
+                          >
                             <img
                               src={editingProduct.image || "/images/jaw-crusher.jpg"}
                               alt={editingProduct.name}
@@ -2610,14 +2916,12 @@ export function AdminBackoffice() {
                               </span>
                               <button
                                 type="button"
-                                onClick={() =>
-                                  setZoomedPhoto({
-                                    src: editingProduct.image || "/images/jaw-crusher.jpg",
-                                    title: editingProduct.name,
-                                  })
-                                }
-                                className="pointer-events-auto rounded-full bg-black/60 hover:bg-black p-2 text-white shadow-md backdrop-blur-md transition-all active:scale-90"
-                                title="Zoom & Inspect HD Image"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openProductLightbox(editingProduct, 0);
+                                }}
+                                className="pointer-events-auto rounded-full bg-black/60 hover:bg-black p-2 text-white shadow-md backdrop-blur-md transition-all active:scale-90 cursor-pointer"
+                                title="Zoom & Inspect HD Image in Large Screen (Z)"
                               >
                                 <ZoomIn className="size-4" />
                               </button>
@@ -2625,11 +2929,18 @@ export function AdminBackoffice() {
 
                             {/* Bottom Identity Overlay */}
                             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-4 pt-10 text-white">
-                              <p className="text-sm font-semibold truncate leading-tight">{editingProduct.name}</p>
-                              <div className="flex items-center gap-2 mt-1 text-xs text-white/80">
-                                <span className="capitalize font-medium">{editingProduct.category} Division</span>
-                                <span>•</span>
-                                <span className="font-mono text-[11px]">{editingProduct.sku || editingProduct.id}</span>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold truncate leading-tight">{editingProduct.name}</p>
+                                  <div className="flex items-center gap-2 mt-1 text-xs text-white/80">
+                                    <span className="capitalize font-medium">{editingProduct.category} Division</span>
+                                    <span>•</span>
+                                    <span className="font-mono text-[11px]">{editingProduct.sku || editingProduct.id}</span>
+                                  </div>
+                                </div>
+                                <span className="shrink-0 rounded-full bg-white/20 backdrop-blur-md px-2.5 py-1 text-[10px] font-semibold text-white group-hover:bg-[#1FA855] transition-all">
+                                  View Large Screen ↗
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -2641,15 +2952,10 @@ export function AdminBackoffice() {
                             </span>
                             <button
                               type="button"
-                              onClick={() =>
-                                setZoomedPhoto({
-                                  src: editingProduct.image || "/images/jaw-crusher.jpg",
-                                  title: editingProduct.name,
-                                })
-                              }
-                              className="font-medium text-[#1D1D1F] hover:underline inline-flex items-center gap-1"
+                              onClick={() => openProductLightbox(editingProduct, 0)}
+                              className="font-medium text-[#1D1D1F] hover:underline inline-flex items-center gap-1 cursor-pointer"
                             >
-                              <ZoomIn className="size-3" />
+                              <Maximize2 className="size-3" />
                               <span>Inspect HD Fullscreen</span>
                             </button>
                           </div>
@@ -2741,184 +3047,6 @@ export function AdminBackoffice() {
                             </form>
                           </div>
                         </div>
-                      </div>
-
-                      {/* Collapsible & Category-Filtered Fleet Photography Library */}
-                      <div className="border-t border-black/[0.06] pt-4 space-y-3">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <Package className="size-4 text-[#1D1D1F]" />
-                            <h4 className="text-sm font-semibold text-[#1D1D1F]">
-                              Harare Yard Fleet Photography Library
-                            </h4>
-                            <span className="rounded-full bg-black/[0.05] px-2 py-0.5 text-[10px] font-medium text-[#6E6E73]">
-                              {editingProduct.category ? `${editingProduct.category.toUpperCase()} Division Photos` : "Preset Library"}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setIsPhotoLibraryExpanded(!isPhotoLibraryExpanded)}
-                              className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white px-3 py-1.5 text-xs font-semibold text-[#1D1D1F] shadow-2xs hover:bg-[#F5F5F7] transition-all cursor-pointer"
-                            >
-                              {isPhotoLibraryExpanded ? (
-                                <>
-                                  <ChevronUp className="size-3.5" />
-                                  <span>Collapse Library</span>
-                                </>
-                              ) : (
-                                <>
-                                  <ChevronDown className="size-3.5" />
-                                  <span>Expand Library ({editingProduct.category ? `${editingProduct.category} only` : "all"})</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Collapsible Content */}
-                        {isPhotoLibraryExpanded && (
-                          <div className="space-y-3.5 rounded-2xl bg-[#F9F9FA] p-3.5 border border-black/[0.06] animate-in fade-in duration-200">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                              {/* Filter buttons */}
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                {[
-                                  { id: editingProduct.category || "all", label: `Related to this ${editingProduct.category || "item"}` },
-                                  { id: "all", label: "Show All Fleet Categories" },
-                                ].map((tab) => {
-                                  const active = (presetCategoryFilter === tab.id) || (presetCategoryFilter === "all" && tab.id === "all");
-                                  return (
-                                    <button
-                                      key={tab.id}
-                                      type="button"
-                                      onClick={() => setPresetCategoryFilter(tab.id)}
-                                      className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
-                                        presetCategoryFilter === tab.id
-                                          ? "bg-[#1D1D1F] text-white shadow-2xs font-semibold"
-                                          : "bg-white text-[#6E6E73] hover:text-[#1D1D1F] border border-black/[0.06]"
-                                      }`}
-                                    >
-                                      <span>{tab.label}</span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-
-                              {/* Instant Search Bar */}
-                              <div className="relative min-w-[200px]">
-                                <Search className="absolute left-2.5 top-2 size-3 text-[#86868B]" />
-                                <input
-                                  type="text"
-                                  value={photoPresetSearch}
-                                  onChange={(e) => setPhotoPresetSearch(e.target.value)}
-                                  placeholder="Filter photos..."
-                                  className="w-full h-7.5 rounded-lg border border-black/[0.08] bg-white pl-7 pr-3 text-xs text-[#1D1D1F] focus:outline-none transition-colors"
-                                />
-                                {photoPresetSearch && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setPhotoPresetSearch("")}
-                                    className="absolute right-2 top-2 text-[#86868B] hover:text-[#1D1D1F]"
-                                  >
-                                    <X className="size-3" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Machinery Photo Cards Grid */}
-                            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 max-h-[360px] overflow-y-auto p-1">
-                              {YARD_PHOTO_PRESETS.filter((p) => {
-                                const activeCat = presetCategoryFilter === "all" ? null : (presetCategoryFilter || editingProduct.category);
-                                const matchesCat = !activeCat || p.category === activeCat;
-                                const matchesSearch =
-                                  !photoPresetSearch ||
-                                  p.label.toLowerCase().includes(photoPresetSearch.toLowerCase()) ||
-                                  p.spec.toLowerCase().includes(photoPresetSearch.toLowerCase()) ||
-                                  p.badge.toLowerCase().includes(photoPresetSearch.toLowerCase());
-                                return matchesCat && matchesSearch;
-                              }).map((preset) => {
-                                const isPrimary = editingProduct.image === preset.src;
-                                const isInGallery = (editingProduct.gallery || []).includes(preset.src);
-                                return (
-                                  <div
-                                    key={preset.src}
-                                    className={`group relative flex flex-col text-left rounded-xl p-2 border transition-all ${
-                                      isPrimary
-                                        ? "border-[#1FA855] bg-white ring-2 ring-[#1FA855] shadow-xs"
-                                        : isInGallery
-                                        ? "border-blue-400 bg-blue-50/20"
-                                        : "border-black/[0.08] bg-white hover:border-black/[0.2]"
-                                    }`}
-                                  >
-                                    <div className="relative h-24 sm:h-28 w-full rounded-lg overflow-hidden bg-black/[0.04] mb-2">
-                                      <img
-                                        src={preset.src}
-                                        alt={preset.label}
-                                        className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
-                                        onError={(e) => {
-                                          (e.target as HTMLImageElement).src = "/images/hero.jpg";
-                                        }}
-                                      />
-                                      <span className="absolute top-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[8px] font-semibold text-white uppercase tracking-wider backdrop-blur-xs">
-                                        {preset.category}
-                                      </span>
-
-                                      {isPrimary && (
-                                        <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded-full bg-[#1FA855] text-white text-[9px] font-bold shadow-xs">
-                                          Primary
-                                        </div>
-                                      )}
-                                      {!isPrimary && isInGallery && (
-                                        <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded-full bg-blue-600 text-white text-[9px] font-bold shadow-xs">
-                                          In Gallery
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    <div className="space-y-0.5 min-w-0 flex-1">
-                                      <p className="text-xs font-semibold text-[#1D1D1F] truncate leading-tight">
-                                        {preset.label}
-                                      </p>
-                                      <p className="text-[10px] text-[#6E6E73] truncate">
-                                        {preset.spec}
-                                      </p>
-                                    </div>
-
-                                    {/* Action buttons */}
-                                    <div className="mt-2 pt-1.5 border-t border-black/[0.06] flex items-center gap-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setEditingProduct({ ...editingProduct, image: preset.src });
-                                          triggerToast(`Set as primary: ${preset.label}`);
-                                        }}
-                                        className={`flex-1 text-[10px] font-semibold py-1 rounded transition-all cursor-pointer ${
-                                          isPrimary
-                                            ? "bg-[#1FA855] text-white"
-                                            : "bg-black/[0.05] text-[#1D1D1F] hover:bg-black/10"
-                                        }`}
-                                      >
-                                        {isPrimary ? "Primary" : "Use Primary"}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          handleAddGalleryUrl(preset.src, true);
-                                        }}
-                                        className="text-[10px] font-semibold py-1 px-2 rounded bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-all cursor-pointer"
-                                        title="Add as secondary gallery photo"
-                                      >
-                                        + Gallery
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
 
@@ -3760,17 +3888,52 @@ export function AdminBackoffice() {
 
                       <div className="flex flex-col sm:flex-row gap-4 items-start">
                         {/* Live Photo Preview */}
-                        <div className="relative size-28 sm:size-32 rounded-xl overflow-hidden bg-black/[0.05] border border-black/[0.08] shrink-0 shadow-xs group">
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => {
+                            setProductLightbox({
+                              isOpen: true,
+                              title: newProdName || "New Machinery Visual Preview",
+                              category: newProdCategory,
+                              price: newProdPrice,
+                              images: [newProdImage || "/images/jaw-crusher.jpg", ...newProdGallery].filter(Boolean),
+                              initialIndex: 0,
+                            });
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setProductLightbox({
+                                isOpen: true,
+                                title: newProdName || "New Machinery Visual Preview",
+                                category: newProdCategory,
+                                price: newProdPrice,
+                                images: [newProdImage || "/images/jaw-crusher.jpg", ...newProdGallery].filter(Boolean),
+                                initialIndex: 0,
+                              });
+                            }
+                          }}
+                          className="relative size-28 sm:size-32 rounded-xl overflow-hidden bg-black/[0.05] border border-black/[0.08] shrink-0 shadow-xs group cursor-pointer"
+                          title="Click to preview photo in large screen"
+                        >
                           <img
                             src={newProdImage || "/images/jaw-crusher.jpg"}
                             alt="Preview"
-                            className="size-full object-cover object-center"
+                            className="size-full object-cover object-center group-hover:scale-105 transition-transform"
                             onError={(e) => {
                               (e.target as HTMLImageElement).src = "/images/hero.jpg";
                             }}
                           />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <label className="cursor-pointer text-white text-[10px] font-semibold bg-black/70 px-2 py-1 rounded-md hover:bg-black">
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-1">
+                            <span className="flex items-center gap-1 text-[9px] text-white font-medium bg-black/70 px-2 py-0.5 rounded-full">
+                              <ZoomIn className="size-2.5" />
+                              <span>View Large</span>
+                            </span>
+                            <label
+                              onClick={(e) => e.stopPropagation()}
+                              className="cursor-pointer text-white text-[9px] font-semibold bg-white/20 hover:bg-white hover:text-black px-2 py-0.5 rounded-md transition-colors"
+                            >
                               Change
                               <input
                                 type="file"
@@ -5700,90 +5863,1213 @@ export function AdminBackoffice() {
         {/* ========================================================================= */}
         {activeTab === "hire" && (
           <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-semibold tracking-tight text-[#1D1D1F]">
-                Active Plant Hire Deployments
-              </h2>
-              <p className="text-xs text-[#86868B] mt-0.5">
-                Heavy machinery operating on contract across Zimbabwe infrastructure, mines, and farms.
-              </p>
+            {/* Header with Title & Primary Actions */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h2 className="text-xl font-semibold tracking-tight text-[#1D1D1F]">
+                    Active Plant Hire Deployments
+                  </h2>
+                  <span className="rounded-full bg-black/[0.05] px-2.5 py-0.5 text-xs font-semibold text-[#1D1D1F]">
+                    {deploymentsList.length} Units
+                  </span>
+                  {filteredDeployments.length !== deploymentsList.length && (
+                    <span className="rounded-full bg-blue-50 text-blue-700 border border-blue-200/60 px-2 py-0.5 text-[11px] font-medium">
+                      {filteredDeployments.length} filtered
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-[#86868B] mt-0.5">
+                  Heavy machinery operating on contract across Zimbabwe infrastructure, mines, and farms.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {deploymentsList.length === 0 && (
+                  <button
+                    type="button"
+                    onClick={handleResetDefaultDeployments}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-full border border-black/[0.08] bg-white px-3.5 text-xs font-semibold text-[#1D1D1F] hover:bg-[#F5F5F7] cursor-pointer"
+                  >
+                    <RotateCcw className="size-3.5" />
+                    <span>Load Sample Fleet</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={openCreateDeployment}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#1D1D1F] px-4 text-xs font-semibold text-white shadow-sm hover:bg-black transition-all cursor-pointer active:scale-95"
+                >
+                  <Plus className="size-3.5" />
+                  <span>Deploy Machinery</span>
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[
-                {
-                  id: "DEP-01",
-                  plant: "20-Tonne CAT 320D Excavator",
-                  client: "Great Dyke Quarries Ltd",
-                  site: "Shamva Gold Claims, Mash Central",
-                  operator: "Wet Rate (With Certified Operator)",
-                  rate: "$480 / day",
-                  status: "Active on Site",
-                  scheduledReturn: "15 Oct 2026",
-                },
-                {
-                  id: "DEP-02",
-                  plant: "37m Concrete Boom Pump",
-                  client: "Terracotta Projects",
-                  site: "Highland Park Ext, Harare",
-                  operator: "Wet Rate (With Certified Operator)",
-                  rate: "$1,800 / pour",
-                  status: "Active on Site",
-                  scheduledReturn: "27 Sep 2026",
-                },
-                {
-                  id: "DEP-03",
-                  plant: "TLB Backhoe Loader (4x4 Turbo)",
-                  client: "Zim-Agro Holdings",
-                  site: "Chinhoyi Farm Block 4",
-                  operator: "Dry Rate (Machine Only)",
-                  rate: "$240 / day",
-                  status: "Active on Site",
-                  scheduledReturn: "30 Sep 2026",
-                },
-                {
-                  id: "DEP-04",
-                  plant: "Motor Grader (Shantui 160HP)",
-                  client: "Norton Municipality Subcontractor",
-                  site: "Norton Ring Road Phase 2",
-                  operator: "Wet Rate (With Certified Operator)",
-                  rate: "$520 / day",
-                  status: "Scheduled Mobilization",
-                  scheduledReturn: "05 Oct 2026",
-                },
-              ].map((dep) => (
-                <div
-                  key={dep.id}
-                  className="rounded-2xl border border-black/[0.06] bg-white p-5 shadow-[0_2px_12px_rgba(0,0,0,0.02)] space-y-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-[11px] text-[#86868B]">{dep.id}</span>
-                    <span className="rounded-full bg-[#E8F8EE] px-2.5 py-0.5 text-[10px] font-semibold text-[#1B833E]">
-                      {dep.status}
-                    </span>
+            {/* KPI Metric Summary Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <div className="rounded-2xl border border-black/[0.06] bg-white p-3.5 shadow-2xs">
+                <span className="text-[11px] font-medium text-[#86868B] uppercase tracking-wider block">
+                  Total Fleet Out
+                </span>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-[#1D1D1F]">{deploymentMetrics.total}</span>
+                  <span className="text-[11px] text-[#86868B]">machines</span>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/40 p-3.5 shadow-2xs">
+                <span className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wider block flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Active On Site
+                </span>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-emerald-950">{deploymentMetrics.activeOnSite}</span>
+                  <span className="text-[11px] text-emerald-700">generating revenue</span>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-blue-200/80 bg-blue-50/40 p-3.5 shadow-2xs">
+                <span className="text-[11px] font-semibold text-blue-800 uppercase tracking-wider block">
+                  Mobilizing Soon
+                </span>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-blue-950">{deploymentMetrics.scheduled}</span>
+                  <span className="text-[11px] text-blue-700">scheduled dispatch</span>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-purple-200/80 bg-purple-50/40 p-3.5 shadow-2xs">
+                <span className="text-[11px] font-semibold text-purple-800 uppercase tracking-wider block">
+                  Transit / Service
+                </span>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-purple-950">{deploymentMetrics.demobilizingOrService}</span>
+                  <span className="text-[11px] text-purple-700">field tech / lowbed</span>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-black/[0.06] bg-white p-3.5 shadow-2xs col-span-2 sm:col-span-1">
+                <span className="text-[11px] font-medium text-[#86868B] uppercase tracking-wider block">
+                  Active Daily Run Rate
+                </span>
+                <div className="mt-1 flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-[#1FA855]">
+                    ${deploymentMetrics.totalDailyRunRate.toLocaleString()}
+                  </span>
+                  <span className="text-[11px] text-[#86868B]">/ day</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Toolbar: Search, Filters, Sorters, View Switcher */}
+            <div className="flex flex-col gap-3 rounded-2xl border border-black/[0.06] bg-white p-3.5 shadow-2xs">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                {/* Search Bar */}
+                <div className="relative flex-1 min-w-[240px]">
+                  <Search className="absolute left-3 top-2.5 size-4 text-[#86868B]" />
+                  <input
+                    type="text"
+                    value={deploymentSearch}
+                    onChange={(e) => {
+                      setDeploymentSearch(e.target.value);
+                      setDeploymentPage(1);
+                    }}
+                    placeholder="Search plant, client, site, contract ref, operator, notes..."
+                    className="w-full h-9 rounded-xl border border-black/[0.08] bg-[#F9F9FA] pl-9 pr-8 text-xs text-[#1D1D1F] placeholder:text-[#86868B] focus:border-black focus:bg-white focus:outline-none transition-all"
+                  />
+                  {deploymentSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setDeploymentSearch("")}
+                      className="absolute right-2.5 top-2.5 text-[#86868B] hover:text-[#1D1D1F] cursor-pointer"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* View Switcher: Table / Grid / Kanban */}
+                <div className="flex items-center gap-1 rounded-xl bg-[#F5F5F7] p-1 self-start sm:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setDeploymentViewMode("table")}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
+                      deploymentViewMode === "table"
+                        ? "bg-white text-[#1D1D1F] shadow-2xs font-semibold"
+                        : "text-[#6E6E73] hover:text-[#1D1D1F]"
+                    }`}
+                    title="Dense Table View (Conducive for large numbers of deployments)"
+                  >
+                    <Table className="size-3.5" />
+                    <span>Table</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeploymentViewMode("grid")}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
+                      deploymentViewMode === "grid"
+                        ? "bg-white text-[#1D1D1F] shadow-2xs font-semibold"
+                        : "text-[#6E6E73] hover:text-[#1D1D1F]"
+                    }`}
+                    title="Card Grid View"
+                  >
+                    <LayoutGrid className="size-3.5" />
+                    <span>Cards</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeploymentViewMode("kanban")}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all cursor-pointer ${
+                      deploymentViewMode === "kanban"
+                        ? "bg-white text-[#1D1D1F] shadow-2xs font-semibold"
+                        : "text-[#6E6E73] hover:text-[#1D1D1F]"
+                    }`}
+                    title="Status Board / Kanban"
+                  >
+                    <Kanban className="size-3.5" />
+                    <span>Status Board</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Secondary Filter Row: Status, Province, Category, Sorting, Items per Page */}
+              <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-black/[0.04] text-xs">
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Status Dropdown */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[#86868B] font-medium text-[11px]">Status:</span>
+                    <select
+                      value={deploymentStatusFilter}
+                      onChange={(e) => {
+                        setDeploymentStatusFilter(e.target.value);
+                        setDeploymentPage(1);
+                      }}
+                      className="h-7.5 rounded-lg border border-black/[0.08] bg-white px-2 text-xs font-medium text-[#1D1D1F] focus:outline-none"
+                    >
+                      <option value="all">All Statuses ({deploymentsList.length})</option>
+                      <option value="Active on Site">Active on Site ({deploymentsList.filter((d) => d.status === "Active on Site").length})</option>
+                      <option value="Scheduled Mobilization">Scheduled Mobilization ({deploymentsList.filter((d) => d.status === "Scheduled Mobilization").length})</option>
+                      <option value="Demobilizing / In Transit">Demobilizing / In Transit ({deploymentsList.filter((d) => d.status === "Demobilizing / In Transit").length})</option>
+                      <option value="Routine Service / Standby">Routine Service / Standby ({deploymentsList.filter((d) => d.status === "Routine Service / Standby").length})</option>
+                      <option value="Returned to Cranborne Yard">Returned to Cranborne Yard ({deploymentsList.filter((d) => d.status === "Returned to Cranborne Yard").length})</option>
+                    </select>
                   </div>
 
-                  <div>
-                    <h3 className="text-base font-semibold text-[#1D1D1F]">{dep.plant}</h3>
-                    <p className="text-xs text-[#6E6E73] mt-0.5">
-                      Client: <strong className="text-[#1D1D1F]">{dep.client}</strong>
-                    </p>
-                    <p className="text-xs text-[#86868B] mt-0.5">📍 {dep.site}</p>
+                  {/* Province Filter */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[#86868B] font-medium text-[11px]">Province:</span>
+                    <select
+                      value={deploymentProvinceFilter}
+                      onChange={(e) => {
+                        setDeploymentProvinceFilter(e.target.value);
+                        setDeploymentPage(1);
+                      }}
+                      className="h-7.5 rounded-lg border border-black/[0.08] bg-white px-2 text-xs font-medium text-[#1D1D1F] focus:outline-none"
+                    >
+                      <option value="all">All Zimbabwe</option>
+                      {PROVINCES.filter((p) => p !== "All Zimbabwe").map((prov) => (
+                        <option key={prov} value={prov}>
+                          {prov}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 rounded-xl bg-[#F5F5F7] p-3 text-xs">
-                    <div>
-                      <span className="text-[10px] text-[#86868B] block uppercase">Billing Rate</span>
-                      <span className="font-semibold text-[#1D1D1F]">{dep.rate}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-[#86868B] block uppercase">Operator</span>
-                      <span className="text-[#1D1D1F] truncate block">{dep.operator}</span>
-                    </div>
+                  {/* Category Filter */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[#86868B] font-medium text-[11px]">Division:</span>
+                    <select
+                      value={deploymentCategoryFilter}
+                      onChange={(e) => {
+                        setDeploymentCategoryFilter(e.target.value);
+                        setDeploymentPage(1);
+                      }}
+                      className="h-7.5 rounded-lg border border-black/[0.08] bg-white px-2 text-xs font-medium text-[#1D1D1F] focus:outline-none"
+                    >
+                      <option value="all">All Divisions</option>
+                      <option value="hire">Plant Hire</option>
+                      <option value="mining">Mining</option>
+                      <option value="farming">Farming</option>
+                      <option value="hardware">Hardware</option>
+                      <option value="industry">Industry</option>
+                    </select>
+                  </div>
+
+                  {/* Sort Order */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[#86868B] font-medium text-[11px]">Sort:</span>
+                    <select
+                      value={deploymentSortBy}
+                      onChange={(e) => setDeploymentSortBy(e.target.value as any)}
+                      className="h-7.5 rounded-lg border border-black/[0.08] bg-white px-2 text-xs font-medium text-[#1D1D1F] focus:outline-none"
+                    >
+                      <option value="return-soon">Return Date (Soonest first)</option>
+                      <option value="newest">Newest Contract</option>
+                      <option value="rate-high">Highest Daily Rate</option>
+                      <option value="plant-az">Machine Name (A-Z)</option>
+                    </select>
                   </div>
                 </div>
-              ))}
+
+                {/* Items Per Page & Count */}
+                <div className="flex items-center gap-3 text-[11px] text-[#86868B]">
+                  <span>
+                    Showing <strong>{filteredDeployments.length}</strong> of {deploymentsList.length}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <span>Per page:</span>
+                    <select
+                      value={deploymentPageSize}
+                      onChange={(e) => {
+                        setDeploymentPageSize(Number(e.target.value));
+                        setDeploymentPage(1);
+                      }}
+                      className="h-6 rounded border border-black/[0.08] bg-white px-1 text-[11px] text-[#1D1D1F]"
+                    >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={999}>All</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
             </div>
+
+            {/* Empty State when no results */}
+            {filteredDeployments.length === 0 ? (
+              <div className="rounded-2xl border border-black/[0.06] bg-white p-12 text-center space-y-3">
+                <Truck className="size-10 text-[#86868B] mx-auto opacity-40" />
+                <h3 className="text-base font-semibold text-[#1D1D1F]">No deployments found</h3>
+                <p className="text-xs text-[#86868B] max-w-md mx-auto">
+                  {deploymentSearch || deploymentStatusFilter !== "all" || deploymentProvinceFilter !== "all" || deploymentCategoryFilter !== "all"
+                    ? "Try adjusting your search terms or filters to locate active machinery contracts."
+                    : "No heavy machinery is currently deployed in the field. Deploy a machine to start tracking contracts."}
+                </p>
+                <div className="pt-2 flex items-center justify-center gap-2">
+                  {(deploymentSearch || deploymentStatusFilter !== "all" || deploymentProvinceFilter !== "all" || deploymentCategoryFilter !== "all") && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeploymentSearch("");
+                        setDeploymentStatusFilter("all");
+                        setDeploymentProvinceFilter("all");
+                        setDeploymentCategoryFilter("all");
+                      }}
+                      className="rounded-full border border-black/[0.08] bg-white px-4 py-2 text-xs font-semibold text-[#1D1D1F] hover:bg-[#F5F5F7] cursor-pointer"
+                    >
+                      Reset Filters
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={openCreateDeployment}
+                    className="rounded-full bg-[#1D1D1F] px-4 py-2 text-xs font-semibold text-white hover:bg-black cursor-pointer shadow-xs"
+                  >
+                    + Deploy Machinery
+                  </button>
+                </div>
+              </div>
+            ) : deploymentViewMode === "table" ? (
+              /* =============================================================== */
+              /* VIEW MODE 1: DENSE TABLE (CONDUCIVE FOR LARGE VOLUMES)           */
+              /* =============================================================== */
+              <div className="rounded-2xl border border-black/[0.08] bg-white shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-black/[0.06] bg-[#FBFBFC] text-[11px] font-semibold text-[#86868B] uppercase tracking-wider">
+                        <th className="py-3 pl-4 pr-3">Machine / Plant</th>
+                        <th className="py-3 px-3">Client & Site Location</th>
+                        <th className="py-3 px-3">Contract & Operator</th>
+                        <th className="py-3 px-3">Billing Rate</th>
+                        <th className="py-3 px-3">Status</th>
+                        <th className="py-3 px-3">Return Date</th>
+                        <th className="py-3 pl-3 pr-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-black/[0.04]">
+                      {paginatedDeployments.map((dep) => {
+                        const statusColors =
+                          dep.status === "Active on Site"
+                            ? "bg-[#E8F8EE] text-[#1B833E] border-emerald-200"
+                            : dep.status === "Scheduled Mobilization"
+                            ? "bg-[#EFF6FF] text-[#1D4ED8] border-blue-200"
+                            : dep.status === "Demobilizing / In Transit"
+                            ? "bg-[#FFFBEB] text-[#B45309] border-amber-200"
+                            : dep.status === "Routine Service / Standby"
+                            ? "bg-[#FAF5FF] text-[#7E22CE] border-purple-200"
+                            : "bg-[#F5F5F7] text-[#6E6E73] border-gray-200";
+
+                        const whatsappLink = `https://wa.me/${(dep.contactPhone || "+263772109441").replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
+                          `Hello ${dep.contactPerson || dep.client}, this is Omnicore Solutions Harare regarding the ${dep.plant} on site at ${dep.site} (Contract Ref: ${dep.contractRef}).`
+                        )}`;
+
+                        return (
+                          <tr key={dep.id} className="hover:bg-[#F9F9FA] transition-colors group">
+                            {/* Plant Column */}
+                            <td className="py-3 pl-4 pr-3">
+                              <div className="flex items-center gap-3">
+                                <div
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() =>
+                                    openProductLightbox({
+                                      name: dep.plant,
+                                      category: dep.category,
+                                      spec: `${dep.client} · ${dep.site}`,
+                                      price: dep.rate,
+                                      sku: dep.sku || dep.id,
+                                      image: dep.image,
+                                    })
+                                  }
+                                  className="relative size-12 rounded-xl overflow-hidden bg-black/[0.05] border border-black/[0.08] shrink-0 cursor-pointer group/thumb shadow-2xs"
+                                  title="Click to preview on large screen"
+                                >
+                                  <img
+                                    src={dep.image || "/images/cat-excavator.jpg"}
+                                    alt={dep.plant}
+                                    className="size-full object-cover transition-transform group-hover/thumb:scale-110"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src = "/images/hero.jpg";
+                                    }}
+                                  />
+                                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity">
+                                    <ZoomIn className="size-3 text-white" />
+                                  </div>
+                                </div>
+                                <div className="min-w-0 max-w-[200px] sm:max-w-[260px]">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-semibold text-[#1D1D1F] truncate block">
+                                      {dep.plant}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-[10px] text-[#86868B] mt-0.5">
+                                    <span className="font-mono">{dep.id}</span>
+                                    <span>·</span>
+                                    <span className="capitalize">{dep.category}</span>
+                                    {dep.sku && (
+                                      <>
+                                        <span>·</span>
+                                        <span className="truncate">{dep.sku}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Client & Site Location */}
+                            <td className="py-3 px-3">
+                              <div className="space-y-0.5 max-w-[220px]">
+                                <span className="font-semibold text-[#1D1D1F] block truncate">
+                                  {dep.client}
+                                </span>
+                                <div className="flex items-center gap-1 text-[11px] text-[#6E6E73] truncate">
+                                  <MapPin className="size-3 text-[#86868B] shrink-0" />
+                                  <span className="truncate">{dep.site}</span>
+                                </div>
+                                <span className="text-[10px] text-[#86868B] block truncate">
+                                  {dep.province}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Contract & Operator */}
+                            <td className="py-3 px-3">
+                              <div className="space-y-0.5 max-w-[180px]">
+                                <span className="font-mono text-[11px] font-medium text-[#1D1D1F] block">
+                                  {dep.contractRef}
+                                </span>
+                                <span className="text-[10px] text-[#6E6E73] block truncate">
+                                  {dep.operator}
+                                </span>
+                                {dep.contactPerson && (
+                                  <span className="text-[10px] text-[#86868B] block truncate">
+                                    Contact: {dep.contactPerson}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Billing Rate */}
+                            <td className="py-3 px-3">
+                              <div className="space-y-0.5">
+                                <span className="inline-block rounded-md bg-[#F5F5F7] px-2 py-0.5 text-xs font-semibold text-[#1D1D1F]">
+                                  {dep.rate}
+                                </span>
+                                {dep.dailyRateUSD > 0 && (
+                                  <span className="text-[10px] text-[#1FA855] font-semibold block">
+                                    ${dep.dailyRateUSD}/day billing
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Status with Quick Status Selector */}
+                            <td className="py-3 px-3">
+                              <div className="space-y-1">
+                                <span
+                                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${statusColors}`}
+                                >
+                                  <span
+                                    className={`size-1.5 rounded-full ${
+                                      dep.status === "Active on Site"
+                                        ? "bg-emerald-500 animate-pulse"
+                                        : dep.status === "Scheduled Mobilization"
+                                        ? "bg-blue-500"
+                                        : dep.status === "Demobilizing / In Transit"
+                                        ? "bg-amber-500"
+                                        : dep.status === "Routine Service / Standby"
+                                        ? "bg-purple-500"
+                                        : "bg-gray-400"
+                                    }`}
+                                  />
+                                  <span>{dep.status}</span>
+                                </span>
+                                <select
+                                  value={dep.status}
+                                  onChange={(e) => handleQuickStatusChange(dep.id, e.target.value as DeploymentStatus)}
+                                  className="block h-5.5 text-[10px] rounded border border-black/[0.08] bg-white px-1 text-[#6E6E73] hover:text-[#1D1D1F] focus:outline-none cursor-pointer"
+                                  title="Quick update status"
+                                >
+                                  <option value="Active on Site">Active on Site</option>
+                                  <option value="Scheduled Mobilization">Scheduled Mobilization</option>
+                                  <option value="Demobilizing / In Transit">Demobilizing / In Transit</option>
+                                  <option value="Routine Service / Standby">Routine Service / Standby</option>
+                                  <option value="Returned to Cranborne Yard">Returned to Cranborne Yard</option>
+                                </select>
+                              </div>
+                            </td>
+
+                            {/* Return Date */}
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              <div className="space-y-0.5">
+                                <span className="text-xs font-medium text-[#1D1D1F] block">
+                                  {dep.scheduledReturn || "Open-ended"}
+                                </span>
+                                <span className="text-[10px] text-[#86868B] block">
+                                  Started: {dep.startDate}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Actions Column */}
+                            <td className="py-3 pl-3 pr-4 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openProductLightbox({
+                                      name: dep.plant,
+                                      category: dep.category,
+                                      spec: `${dep.client} · ${dep.site}`,
+                                      price: dep.rate,
+                                      sku: dep.sku || dep.id,
+                                      image: dep.image,
+                                    })
+                                  }
+                                  className="flex size-7.5 items-center justify-center rounded-lg border border-black/[0.06] bg-white text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-[#F5F5F7] transition-all cursor-pointer"
+                                  title="Preview Machinery Photo in HD Large Screen"
+                                >
+                                  <ZoomIn className="size-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openEditDeployment(dep)}
+                                  className="flex size-7.5 items-center justify-center rounded-lg border border-black/[0.06] bg-white text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-[#F5F5F7] transition-all cursor-pointer"
+                                  title="Edit Deployment Record"
+                                >
+                                  <Edit3 className="size-3.5" />
+                                </button>
+                                <a
+                                  href={whatsappLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex size-7.5 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-[#1B833E] hover:bg-emerald-100 transition-all cursor-pointer"
+                                  title="WhatsApp Client Regarding Contract"
+                                >
+                                  <WhatsAppIcon className="size-3.5" />
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDeployment(dep.id)}
+                                  className="flex size-7.5 items-center justify-center rounded-lg border border-red-200/60 bg-white text-red-600 hover:bg-red-50 transition-all cursor-pointer"
+                                  title="Delete Deployment"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : deploymentViewMode === "grid" ? (
+              /* =============================================================== */
+              /* VIEW MODE 2: CARDS GRID (POLISHED VISUAL OVERVIEW)              */
+              /* =============================================================== */
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {paginatedDeployments.map((dep) => {
+                  const statusColors =
+                    dep.status === "Active on Site"
+                      ? "bg-[#E8F8EE] text-[#1B833E] border-emerald-200"
+                      : dep.status === "Scheduled Mobilization"
+                      ? "bg-[#EFF6FF] text-[#1D4ED8] border-blue-200"
+                      : dep.status === "Demobilizing / In Transit"
+                      ? "bg-[#FFFBEB] text-[#B45309] border-amber-200"
+                      : dep.status === "Routine Service / Standby"
+                      ? "bg-[#FAF5FF] text-[#7E22CE] border-purple-200"
+                      : "bg-[#F5F5F7] text-[#6E6E73] border-gray-200";
+
+                  const whatsappLink = `https://wa.me/${(dep.contactPhone || "+263772109441").replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
+                    `Hello ${dep.contactPerson || dep.client}, this is Omnicore Solutions Harare regarding the ${dep.plant} on site at ${dep.site} (Contract Ref: ${dep.contractRef}).`
+                  )}`;
+
+                  return (
+                    <div
+                      key={dep.id}
+                      className="group relative flex flex-col rounded-2xl border border-black/[0.08] bg-white p-4 shadow-sm hover:border-black/[0.15] hover:shadow-md transition-all"
+                    >
+                      {/* Top Bar with Thumbnail & Badges */}
+                      <div className="flex gap-3 items-start">
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() =>
+                            openProductLightbox({
+                              name: dep.plant,
+                              category: dep.category,
+                              spec: `${dep.client} · ${dep.site}`,
+                              price: dep.rate,
+                              sku: dep.sku || dep.id,
+                              image: dep.image,
+                            })
+                          }
+                          className="relative size-16 sm:size-20 rounded-xl overflow-hidden bg-black/[0.05] border border-black/[0.08] shrink-0 cursor-pointer shadow-2xs group/pic"
+                          title="Click to view photo in large screen"
+                        >
+                          <img
+                            src={dep.image || "/images/cat-excavator.jpg"}
+                            alt={dep.plant}
+                            className="size-full object-cover transition-transform group-hover/pic:scale-105"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = "/images/hero.jpg";
+                            }}
+                          />
+                          <div className="absolute inset-0 bg-black/35 opacity-0 group-hover/pic:opacity-100 transition-opacity flex items-center justify-center">
+                            <ZoomIn className="size-4 text-white" />
+                          </div>
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1.5 mb-1">
+                            <span className="font-mono text-[10px] font-semibold text-[#86868B]">
+                              {dep.id}
+                            </span>
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${statusColors}`}
+                            >
+                              {dep.status}
+                            </span>
+                          </div>
+                          <h3 className="text-sm font-semibold text-[#1D1D1F] line-clamp-1 leading-snug">
+                            {dep.plant}
+                          </h3>
+                          <p className="text-xs text-[#6E6E73] truncate mt-0.5">
+                            Client: <strong className="text-[#1D1D1F] font-semibold">{dep.client}</strong>
+                          </p>
+                          <p className="text-[11px] text-[#86868B] truncate mt-0.5 flex items-center gap-1">
+                            <MapPin className="size-3 text-[#86868B] shrink-0" />
+                            <span>{dep.site}</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Middle Details Grid */}
+                      <div className="mt-3.5 grid grid-cols-2 gap-2 rounded-xl bg-[#F5F5F7] p-2.5 text-xs">
+                        <div>
+                          <span className="text-[9px] text-[#86868B] block uppercase tracking-wider">
+                            Billing Rate
+                          </span>
+                          <span className="font-semibold text-[#1D1D1F] block">{dep.rate}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-[#86868B] block uppercase tracking-wider">
+                            Scheduled Return
+                          </span>
+                          <span className="font-semibold text-[#1D1D1F] block truncate">
+                            {dep.scheduledReturn || "Open"}
+                          </span>
+                        </div>
+                        <div className="col-span-2 pt-1 border-t border-black/[0.04]">
+                          <span className="text-[9px] text-[#86868B] block uppercase tracking-wider">
+                            Contract & Operator
+                          </span>
+                          <span className="text-[#1D1D1F] truncate block font-medium">
+                            {dep.contractRef} · {dep.operator}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Card Footer Actions */}
+                      <div className="mt-3 pt-2.5 border-t border-black/[0.06] flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-medium text-[#86868B]">
+                          📍 {dep.province}
+                        </span>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openEditDeployment(dep)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-black/[0.08] bg-white px-2.5 py-1 text-xs font-semibold text-[#1D1D1F] hover:bg-[#F5F5F7] cursor-pointer"
+                          >
+                            <Edit3 className="size-3" />
+                            <span>Edit</span>
+                          </button>
+                          <a
+                            href={whatsappLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                            title="WhatsApp client"
+                          >
+                            <WhatsAppIcon className="size-3" />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDeployment(dep.id)}
+                            className="inline-flex size-7 items-center justify-center rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50 cursor-pointer"
+                            title="Delete"
+                          >
+                            <Trash2 className="size-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              /* =============================================================== */
+              /* VIEW MODE 3: KANBAN / STATUS BOARD                             */
+              /* =============================================================== */
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5 overflow-x-auto pb-2">
+                {(
+                  [
+                    { id: "Active on Site", label: "Active on Site", color: "emerald", border: "border-emerald-200", bg: "bg-emerald-50/50" },
+                    { id: "Scheduled Mobilization", label: "Scheduled", color: "blue", border: "border-blue-200", bg: "bg-blue-50/50" },
+                    { id: "Demobilizing / In Transit", label: "In Transit", color: "amber", border: "border-amber-200", bg: "bg-amber-50/50" },
+                    { id: "Routine Service / Standby", label: "Service / Standby", color: "purple", border: "border-purple-200", bg: "bg-purple-50/50" },
+                    { id: "Returned to Cranborne Yard", label: "Returned to Yard", color: "gray", border: "border-gray-200", bg: "bg-gray-50/50" },
+                  ] as const
+                ).map((col) => {
+                  const itemsInCol = filteredDeployments.filter((d) => d.status === col.id);
+                  return (
+                    <div
+                      key={col.id}
+                      className={`flex flex-col rounded-2xl border ${col.border} ${col.bg} p-3 min-w-[240px]`}
+                    >
+                      {/* Column Header */}
+                      <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-black/[0.06]">
+                        <span className="text-xs font-semibold text-[#1D1D1F] truncate">{col.label}</span>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[#1D1D1F] border border-black/[0.06]">
+                          {itemsInCol.length}
+                        </span>
+                      </div>
+
+                      {/* Items Column Container */}
+                      <div className="space-y-2.5 flex-1 min-h-[160px]">
+                        {itemsInCol.length === 0 ? (
+                          <div className="h-28 rounded-xl border border-dashed border-black/[0.1] flex items-center justify-center text-[11px] text-[#86868B]">
+                            No machines
+                          </div>
+                        ) : (
+                          itemsInCol.map((dep) => (
+                            <div
+                              key={dep.id}
+                              className="rounded-xl border border-black/[0.08] bg-white p-3 shadow-2xs space-y-2 hover:border-black/[0.18] transition-all"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <span className="font-mono text-[10px] text-[#86868B]">{dep.id}</span>
+                                <span className="text-[10px] font-bold text-[#1D1D1F] bg-[#F5F5F7] px-1.5 py-0.5 rounded">
+                                  {dep.rate}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <img
+                                  src={dep.image || "/images/cat-excavator.jpg"}
+                                  alt={dep.plant}
+                                  className="size-9 rounded-lg object-cover bg-black/[0.04] shrink-0"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = "/images/hero.jpg";
+                                  }}
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <h4 className="text-xs font-semibold text-[#1D1D1F] truncate leading-tight">
+                                    {dep.plant}
+                                  </h4>
+                                  <p className="text-[11px] text-[#6E6E73] truncate">{dep.client}</p>
+                                </div>
+                              </div>
+
+                              <p className="text-[10px] text-[#86868B] truncate">📍 {dep.site}</p>
+
+                              <div className="pt-2 border-t border-black/[0.04] flex items-center justify-between text-[10px]">
+                                <span className="text-[#86868B]">Due: {dep.scheduledReturn || "Open"}</span>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditDeployment(dep)}
+                                    className="p-1 rounded text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-[#F5F5F7]"
+                                    title="Edit"
+                                  >
+                                    <Edit3 className="size-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteDeployment(dep.id)}
+                                    className="p-1 rounded text-red-600 hover:bg-red-50"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="size-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Pagination Controls */}
+            {deploymentTotalPages > 1 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-black/[0.06] bg-white p-3 text-xs shadow-2xs">
+                <span className="text-[11px] text-[#86868B]">
+                  Showing page <strong>{deploymentPage}</strong> of <strong>{deploymentTotalPages}</strong> ({filteredDeployments.length} total)
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={deploymentPage <= 1}
+                    onClick={() => setDeploymentPage(1)}
+                    className="flex size-7.5 items-center justify-center rounded-lg border border-black/[0.08] bg-white text-[#1D1D1F] hover:bg-[#F5F5F7] disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                    title="First page"
+                  >
+                    <ChevronsLeft className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deploymentPage <= 1}
+                    onClick={() => setDeploymentPage((p) => Math.max(1, p - 1))}
+                    className="flex size-7.5 items-center justify-center rounded-lg border border-black/[0.08] bg-white text-[#1D1D1F] hover:bg-[#F5F5F7] disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                    title="Previous page"
+                  >
+                    <ChevronLeft className="size-3.5" />
+                  </button>
+                  <span className="px-3 py-1 text-xs font-semibold text-[#1D1D1F]">
+                    {deploymentPage} / {deploymentTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={deploymentPage >= deploymentTotalPages}
+                    onClick={() => setDeploymentPage((p) => Math.min(deploymentTotalPages, p + 1))}
+                    className="flex size-7.5 items-center justify-center rounded-lg border border-black/[0.08] bg-white text-[#1D1D1F] hover:bg-[#F5F5F7] disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                    title="Next page"
+                  >
+                    <ChevronRight className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deploymentPage >= deploymentTotalPages}
+                    onClick={() => setDeploymentPage(deploymentTotalPages)}
+                    className="flex size-7.5 items-center justify-center rounded-lg border border-black/[0.08] bg-white text-[#1D1D1F] hover:bg-[#F5F5F7] disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                    title="Last page"
+                  >
+                    <ChevronsRight className="size-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Modal: Add or Edit Field Deployment */}
+            {showDeployModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+                <div className="w-full max-w-2xl rounded-2xl border border-black/[0.08] bg-white p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+                  <div className="flex items-center justify-between border-b border-black/[0.06] pb-3">
+                    <div>
+                      <h3 className="text-base font-semibold text-[#1D1D1F]">
+                        {editingDeployment ? `Edit Field Deployment (${editingDeployment.id})` : "Deploy Machinery on Field Contract"}
+                      </h3>
+                      <p className="text-[11px] text-[#86868B] mt-0.5">
+                        {editingDeployment
+                          ? "Update site location, billing rate, status, return dates, or client details."
+                          : "Log a heavy machine dispatch from Cranborne yard to an infrastructure, mining, or farm site."}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowDeployModal(false)}
+                      className="rounded-full p-1 text-[#86868B] hover:bg-[#F5F5F7] cursor-pointer"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSaveDeployment} className="mt-4 space-y-4 text-xs">
+                    {/* Inventory Quick-Pick Preset */}
+                    {!editingDeployment && (
+                      <div className="rounded-xl border border-black/[0.08] bg-[#FBFBFC] p-3 space-y-1.5">
+                        <label className="font-semibold text-[#1D1D1F] block text-xs">
+                          Fast Select from Cranborne Yard Inventory (Optional)
+                        </label>
+                        <select
+                          value={deployMachineId}
+                          onChange={(e) => {
+                            const chosenId = e.target.value;
+                            setDeployMachineId(chosenId);
+                            const chosenProd = equipmentList.find((p) => p.id === chosenId);
+                            if (chosenProd) {
+                              setDeployPlant(chosenProd.name);
+                              setDeployCategory((chosenProd.category as any) || "hire");
+                              if (chosenProd.sku) setDeploySku(chosenProd.sku);
+                              if (chosenProd.image) setDeployImage(chosenProd.image);
+                              if (chosenProd.price) setDeployRate(chosenProd.price);
+                            }
+                          }}
+                          className="w-full h-8.5 rounded-lg border border-black/[0.08] bg-white px-2.5 text-xs text-[#1D1D1F] focus:outline-none"
+                        >
+                          <option value="">-- Choose from Harare Inventory (or enter below) --</option>
+                          {equipmentList.map((eq) => (
+                            <option key={eq.id} value={eq.id}>
+                              {eq.name} ({eq.sku || eq.id}) - {eq.category.toUpperCase()}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Machinery Identification Row */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="font-semibold text-[#1D1D1F] block mb-1">
+                          Machinery / Plant Name *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={deployPlant}
+                          onChange={(e) => setDeployPlant(e.target.value)}
+                          placeholder="e.g. 20-Tonne CAT 320D Excavator"
+                          className="w-full h-8.5 rounded-lg border border-black/[0.08] bg-white px-2.5 text-xs text-[#1D1D1F] focus:border-black focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-[#1D1D1F] block mb-1">
+                          Division Category
+                        </label>
+                        <select
+                          value={deployCategory}
+                          onChange={(e) => setDeployCategory(e.target.value as any)}
+                          className="w-full h-8.5 rounded-lg border border-black/[0.08] bg-white px-2.5 text-xs text-[#1D1D1F] focus:outline-none"
+                        >
+                          <option value="hire">Plant Hire</option>
+                          <option value="mining">Mining</option>
+                          <option value="farming">Farming</option>
+                          <option value="hardware">Hardware</option>
+                          <option value="industry">Industry</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-[#1D1D1F] block mb-1">
+                          Asset SKU / Serial Number
+                        </label>
+                        <input
+                          type="text"
+                          value={deploySku}
+                          onChange={(e) => setDeploySku(e.target.value)}
+                          placeholder="e.g. OMNI-HIR-320D"
+                          className="w-full h-8.5 rounded-lg border border-black/[0.08] bg-white px-2.5 text-xs text-[#1D1D1F] focus:border-black focus:outline-none font-mono"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-[#1D1D1F] block mb-1">
+                          Machinery Photo URL or Upload
+                        </label>
+                        <div className="flex gap-2 items-center">
+                          <input
+                            type="text"
+                            value={deployImage}
+                            onChange={(e) => setDeployImage(e.target.value)}
+                            placeholder="/images/cat-excavator.jpg"
+                            className="flex-1 h-8.5 rounded-lg border border-black/[0.08] bg-white px-2.5 text-xs text-[#1D1D1F] focus:border-black focus:outline-none"
+                          />
+                          <label className="h-8.5 px-3 rounded-lg border border-black/[0.08] bg-[#F5F5F7] hover:bg-[#EBEBEB] text-[#1D1D1F] font-semibold text-[11px] inline-flex items-center gap-1 cursor-pointer shrink-0">
+                            <Upload className="size-3" />
+                            <span>Upload</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleDeployImageUpload}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Client & Contract Details */}
+                    <div className="rounded-xl border border-black/[0.08] bg-[#FBFBFC] p-3.5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-[#1D1D1F] text-xs">
+                          Client & Site Deployment Details
+                        </span>
+                        {/* Quick fill from CRM clients */}
+                        <select
+                          onChange={(e) => {
+                            const chosen = clients.find((c) => c.name === e.target.value);
+                            if (chosen) {
+                              setDeployClient(chosen.organization ? `${chosen.name} (${chosen.organization})` : chosen.name);
+                              if (chosen.phone) setDeployContactPhone(chosen.phone);
+                              if (chosen.province && chosen.province !== "All Zimbabwe") setDeployProvince(chosen.province);
+                              if (chosen.location) setDeploySite(chosen.location);
+                              setDeployContactPerson(chosen.name);
+                            }
+                          }}
+                          className="h-6 text-[10px] rounded border border-black/[0.08] bg-white px-1.5 text-[#6E6E73] focus:outline-none"
+                        >
+                          <option value="">Quick fill from CRM clients...</option>
+                          {clients.map((c) => (
+                            <option key={c.id} value={c.name}>
+                              {c.name} {c.organization ? `(${c.organization})` : ""} - {c.province}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="font-semibold text-[#1D1D1F] block mb-1">
+                            Client Organization / Individual *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={deployClient}
+                            onChange={(e) => setDeployClient(e.target.value)}
+                            placeholder="e.g. Great Dyke Quarries Ltd"
+                            className="w-full h-8.5 rounded-lg border border-black/[0.08] bg-white px-2.5 text-xs text-[#1D1D1F] focus:border-black focus:outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-semibold text-[#1D1D1F] block mb-1">
+                            Contract Reference #
+                          </label>
+                          <input
+                            type="text"
+                            value={deployContractRef}
+                            onChange={(e) => setDeployContractRef(e.target.value)}
+                            placeholder="e.g. CNT-2026-105"
+                            className="w-full h-8.5 rounded-lg border border-black/[0.08] bg-white px-2.5 text-xs text-[#1D1D1F] focus:border-black focus:outline-none font-mono"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-semibold text-[#1D1D1F] block mb-1">
+                            Site Location / Mine / Farm *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={deploySite}
+                            onChange={(e) => setDeploySite(e.target.value)}
+                            placeholder="e.g. Shamva Gold Claims, Mash Central"
+                            className="w-full h-8.5 rounded-lg border border-black/[0.08] bg-white px-2.5 text-xs text-[#1D1D1F] focus:border-black focus:outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-semibold text-[#1D1D1F] block mb-1">
+                            Province in Zimbabwe
+                          </label>
+                          <select
+                            value={deployProvince}
+                            onChange={(e) => setDeployProvince(e.target.value)}
+                            className="w-full h-8.5 rounded-lg border border-black/[0.08] bg-white px-2.5 text-xs text-[#1D1D1F] focus:outline-none"
+                          >
+                            {PROVINCES.filter((p) => p !== "All Zimbabwe").map((prov) => (
+                              <option key={prov} value={prov}>
+                                {prov}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="font-semibold text-[#1D1D1F] block mb-1">
+                            Contact Person on Site
+                          </label>
+                          <input
+                            type="text"
+                            value={deployContactPerson}
+                            onChange={(e) => setDeployContactPerson(e.target.value)}
+                            placeholder="e.g. Eng. T. Masvingise"
+                            className="w-full h-8.5 rounded-lg border border-black/[0.08] bg-white px-2.5 text-xs text-[#1D1D1F] focus:border-black focus:outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-semibold text-[#1D1D1F] block mb-1">
+                            Contact Phone / WhatsApp
+                          </label>
+                          <input
+                            type="text"
+                            value={deployContactPhone}
+                            onChange={(e) => setDeployContactPhone(e.target.value)}
+                            placeholder="+263 77 210 9441"
+                            className="w-full h-8.5 rounded-lg border border-black/[0.08] bg-white px-2.5 text-xs text-[#1D1D1F] focus:border-black focus:outline-none font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Operational & Commercial Terms */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                      <div>
+                        <label className="font-semibold text-[#1D1D1F] block mb-1">
+                          Operator Arrangement
+                        </label>
+                        <select
+                          value={deployOperator}
+                          onChange={(e) => setDeployOperator(e.target.value)}
+                          className="w-full h-8.5 rounded-lg border border-black/[0.08] bg-white px-2 text-xs text-[#1D1D1F] focus:outline-none"
+                        >
+                          <option value="Wet Rate (With Certified Operator)">Wet Rate (With Certified Operator)</option>
+                          <option value="Dry Rate (Machine Only)">Dry Rate (Machine Only)</option>
+                          <option value="Wet Rate (Double Shift Crew)">Wet Rate (Double Shift Crew)</option>
+                          <option value="Wet Rate (With Plant Mechanic)">Wet Rate (With Plant Mechanic)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-[#1D1D1F] block mb-1">
+                          Billing Rate
+                        </label>
+                        <input
+                          type="text"
+                          value={deployRate}
+                          onChange={(e) => setDeployRate(e.target.value)}
+                          placeholder="e.g. $480 / day"
+                          className="w-full h-8.5 rounded-lg border border-black/[0.08] bg-white px-2.5 text-xs text-[#1D1D1F] focus:border-black focus:outline-none font-semibold text-[#1FA855]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-[#1D1D1F] block mb-1">
+                          Deployment Status
+                        </label>
+                        <select
+                          value={deployStatus}
+                          onChange={(e) => setDeployStatus(e.target.value as DeploymentStatus)}
+                          className="w-full h-8.5 rounded-lg border border-black/[0.08] bg-white px-2 text-xs text-[#1D1D1F] focus:outline-none font-semibold"
+                        >
+                          <option value="Active on Site">Active on Site</option>
+                          <option value="Scheduled Mobilization">Scheduled Mobilization</option>
+                          <option value="Demobilizing / In Transit">Demobilizing / In Transit</option>
+                          <option value="Routine Service / Standby">Routine Service / Standby</option>
+                          <option value="Returned to Cranborne Yard">Returned to Cranborne Yard</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-[#1D1D1F] block mb-1">
+                          Contract Start Date
+                        </label>
+                        <input
+                          type="date"
+                          value={deployStartDate}
+                          onChange={(e) => setDeployStartDate(e.target.value)}
+                          className="w-full h-8.5 rounded-lg border border-black/[0.08] bg-white px-2.5 text-xs text-[#1D1D1F] focus:border-black focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-[#1D1D1F] block mb-1">
+                          Scheduled Return Date
+                        </label>
+                        <input
+                          type="date"
+                          value={deployReturnDate}
+                          onChange={(e) => setDeployReturnDate(e.target.value)}
+                          className="w-full h-8.5 rounded-lg border border-black/[0.08] bg-white px-2.5 text-xs text-[#1D1D1F] focus:border-black focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Operational Notes */}
+                    <div>
+                      <label className="font-semibold text-[#1D1D1F] block mb-1">
+                        Operational Scope & Mobilization Notes
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={deployNotes}
+                        onChange={(e) => setDeployNotes(e.target.value)}
+                        placeholder="e.g. Overburden stripping on Reef 3. 250hr service completed on site by Cranborne field team."
+                        className="w-full rounded-lg border border-black/[0.08] bg-white p-2.5 text-xs text-[#1D1D1F] focus:border-black focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Footer Buttons */}
+                    <div className="flex items-center justify-between border-t border-black/[0.06] pt-3.5">
+                      {editingDeployment ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowDeployModal(false);
+                            handleDeleteDeployment(editingDeployment.id);
+                          }}
+                          className="text-xs font-semibold text-red-600 hover:text-red-700 cursor-pointer"
+                        >
+                          Delete Deployment
+                        </button>
+                      ) : (
+                        <div />
+                      )}
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowDeployModal(false)}
+                          className="rounded-lg border border-black/[0.08] bg-white px-4 py-2 text-xs font-semibold text-[#1D1D1F] hover:bg-[#F5F5F7] cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="rounded-lg bg-[#1D1D1F] px-5 py-2 text-xs font-semibold text-white hover:bg-black transition-all cursor-pointer shadow-xs"
+                        >
+                          {editingDeployment ? "Save Changes" : "Deploy Machine"}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

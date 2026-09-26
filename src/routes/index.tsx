@@ -91,13 +91,6 @@ function Home() {
               <span className="size-2 rounded-full bg-whatsapp" />
               {copy.heroBadge || "Cranborne yard · 115 Chiremba Road, Harare"}
             </div>
-            <Link
-              to="/admin"
-              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/25 px-3.5 py-1.5 text-xs font-semibold text-amber-300 backdrop-blur-sm hover:bg-amber-500/40 transition-all shadow-sm"
-            >
-              <span className="size-2 rounded-full bg-amber-400 animate-pulse" />
-              <span>Switch to Admin Backoffice →</span>
-            </Link>
           </div>
 
           <h1 className="mt-5 max-w-3xl text-4xl font-semibold tracking-tight text-paper sm:text-6xl lg:text-7xl">

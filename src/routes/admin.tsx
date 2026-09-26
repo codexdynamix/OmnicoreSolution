@@ -28,17 +28,27 @@ import {
   CheckCircle2,
   ZoomIn,
   Building2,
-  ShieldCheck,
-  Layers,
-  Wrench,
-  Grid,
-  SlidersHorizontal,
   Maximize2,
   Columns,
-  LayoutGrid,
   Recycle,
   ArchiveRestore,
   AlertTriangle,
+  Lock,
+  LogOut,
+  KeyRound,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  ImagePlus,
+  Table,
+  LayoutGrid,
+  Kanban,
+  Calendar,
+  DollarSign,
+  Filter,
+  ArrowUpDown,
+  SlidersHorizontal,
+  Layers,
 } from "lucide-react";
 import {
   CRMClient,
@@ -56,6 +66,10 @@ import {
   saveStoredRecycleBin,
   toRecycleClient,
   toRecycleProduct,
+  DeploymentRecord,
+  DeploymentStatus,
+  getStoredDeployments,
+  saveStoredDeployments,
 } from "@/lib/cms-store";
 import { WhatsAppIcon } from "@/components/ui/official-badges";
 import { whatsappUrl } from "@/data/site";
@@ -299,7 +313,79 @@ function stageChipClass(stage: CRMClient["stage"]) {
   return "bg-black/[0.05] text-[#1D1D1F]";
 }
 
+const ADMIN_CREDENTIALS = {
+  username: "admin@omnisolutions.local",
+  password: "Admin123!",
+};
+
+const AUTH_STORAGE_KEY = "omnicore_admin_authenticated";
+
 export function AdminBackoffice() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return (
+        sessionStorage.getItem(AUTH_STORAGE_KEY) === "true" ||
+        localStorage.getItem(AUTH_STORAGE_KEY) === "true"
+      );
+    } catch {
+      return false;
+    }
+  });
+
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginRemember, setLoginRemember] = useState(true);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
+
+  function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setLoginError(null);
+    setIsSubmittingLogin(true);
+
+    const inputUser = loginEmail.trim().toLowerCase();
+    const inputPass = loginPassword.trim();
+
+    if (
+      (inputUser === ADMIN_CREDENTIALS.username.toLowerCase() ||
+        inputUser === "admin") &&
+      inputPass === ADMIN_CREDENTIALS.password
+    ) {
+      setTimeout(() => {
+        setIsAuthenticated(true);
+        setIsSubmittingLogin(false);
+        try {
+          if (loginRemember) {
+            localStorage.setItem(AUTH_STORAGE_KEY, "true");
+          } else {
+            sessionStorage.setItem(AUTH_STORAGE_KEY, "true");
+          }
+        } catch {
+          // ignore
+        }
+        triggerToast("Welcome back! Verified Omnicore Operations Desk.");
+      }, 350);
+    } else {
+      setTimeout(() => {
+        setIsSubmittingLogin(false);
+        setLoginError("Invalid credentials. Please enter the authorized administrator email and password.");
+      }, 350);
+    }
+  }
+
+  function handleLogout() {
+    try {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+    setIsAuthenticated(false);
+    setLoginPassword("");
+    triggerToast("Logged out of Operations Backoffice");
+  }
+
   const [activeTab, setActiveTab] = useState<Tab>("crm");
   const [clients, setClients] = useState<CRMClient[]>(getStoredCRMClients);
   const [equipmentList, setEquipmentList] = useState<ExtendedEquipment[]>(getStoredEquipment);
@@ -341,25 +427,142 @@ export function AdminBackoffice() {
   const [newProdPrice, setNewProdPrice] = useState("");
   const [newProdBlurb, setNewProdBlurb] = useState("");
   const [newProdImage, setNewProdImage] = useState("/images/jaw-crusher.jpg");
+  const [newProdGallery, setNewProdGallery] = useState<string[]>([]);
+  const [isPhotoLibraryExpanded, setIsPhotoLibraryExpanded] = useState(false);
+  const [isNewProdLibraryExpanded, setIsNewProdLibraryExpanded] = useState(false);
+  const [isCmsPreviewOpen, setIsCmsPreviewOpen] = useState(true);
 
-  function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>, isEditing = false) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 8 * 1024 * 1024) {
-      triggerToast("Please choose an image under 8MB");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      if (isEditing && editingProduct) {
-        setEditingProduct({ ...editingProduct, image: result });
+  // Field Deployments State (Search, Filter, Pagination, View Mode, Sorting)
+  const [deploymentsList, setDeploymentsList] = useState<DeploymentRecord[]>(getStoredDeployments);
+  const [deploymentSearch, setDeploymentSearch] = useState("");
+  const [deploymentStatusFilter, setDeploymentStatusFilter] = useState("all");
+  const [deploymentProvinceFilter, setDeploymentProvinceFilter] = useState("all");
+  const [deploymentCategoryFilter, setDeploymentCategoryFilter] = useState("all");
+  const [deploymentSortBy, setDeploymentSortBy] = useState<"return-soon" | "newest" | "rate-high" | "plant-az">("return-soon");
+  const [deploymentViewMode, setDeploymentViewMode] = useState<"table" | "grid" | "kanban">("table");
+  const [deploymentPage, setDeploymentPage] = useState(1);
+  const [deploymentPageSize, setDeploymentPageSize] = useState(10);
+  const [showDeployModal, setShowDeployModal] = useState(false);
+  const [editingDeployment, setEditingDeployment] = useState<DeploymentRecord | null>(null);
+
+  // Deploy Machinery Modal Form States
+  const [deployMachineId, setDeployMachineId] = useState("");
+  const [deployPlant, setDeployPlant] = useState("");
+  const [deployCategory, setDeployCategory] = useState<DeploymentRecord["category"]>("hire");
+  const [deploySku, setDeploySku] = useState("");
+  const [deployImage, setDeployImage] = useState("/images/cat-excavator.jpg");
+  const [deployClient, setDeployClient] = useState("");
+  const [deploySite, setDeploySite] = useState("");
+  const [deployProvince, setDeployProvince] = useState("Harare");
+  const [deployOperator, setDeployOperator] = useState("Wet Rate (With Certified Operator)");
+  const [deployRate, setDeployRate] = useState("$480 / day");
+  const [deployStartDate, setDeployStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [deployReturnDate, setDeployReturnDate] = useState("");
+  const [deployContractRef, setDeployContractRef] = useState(`CNT-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`);
+  const [deployContactPerson, setDeployContactPerson] = useState("");
+  const [deployContactPhone, setDeployContactPhone] = useState("+263 ");
+  const [deployNotes, setDeployNotes] = useState("");
+
+  function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>, isEditing = false, asGalleryItem = false) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const fileList: File[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      if (f.size > 12 * 1024 * 1024) {
+        triggerToast(`${f.name} is too large (>12MB)`);
       } else {
-        setNewProdImage(result);
+        fileList.push(f);
       }
-      triggerToast("Photo uploaded successfully!");
-    };
-    reader.readAsDataURL(file);
+    }
+    if (fileList.length === 0) return;
+
+    let loaded = 0;
+    const loadedUrls: string[] = [];
+
+    fileList.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        loadedUrls.push(result);
+        loaded++;
+
+        if (loaded === fileList.length) {
+          if (isEditing && editingProduct) {
+            if (asGalleryItem || loadedUrls.length > 1) {
+              const currentGallery = editingProduct.gallery || [];
+              if (!asGalleryItem && loadedUrls.length > 1) {
+                const [first, ...rest] = loadedUrls;
+                setEditingProduct({
+                  ...editingProduct,
+                  image: first,
+                  gallery: [...currentGallery, ...rest],
+                });
+                triggerToast(`Updated primary photo and added ${rest.length} photo(s) to gallery`);
+              } else {
+                setEditingProduct({
+                  ...editingProduct,
+                  gallery: [...currentGallery, ...loadedUrls],
+                });
+                triggerToast(`Added ${loadedUrls.length} photo(s) to product gallery`);
+              }
+            } else {
+              setEditingProduct({ ...editingProduct, image: loadedUrls[0] });
+              triggerToast("Primary photo updated successfully!");
+            }
+          } else {
+            if (asGalleryItem || loadedUrls.length > 1) {
+              if (!asGalleryItem && loadedUrls.length > 1) {
+                const [first, ...rest] = loadedUrls;
+                setNewProdImage(first);
+                setNewProdGallery((prev) => [...prev, ...rest]);
+                triggerToast(`Updated primary photo and added ${rest.length} photo(s) to gallery`);
+              } else {
+                setNewProdGallery((prev) => [...prev, ...loadedUrls]);
+                triggerToast(`Added ${loadedUrls.length} photo(s) to gallery`);
+              }
+            } else {
+              setNewProdImage(loadedUrls[0]);
+              triggerToast("Primary photo uploaded successfully!");
+            }
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function handleAddGalleryUrl(url: string, isEditing = false) {
+    if (!url.trim()) return;
+    if (isEditing && editingProduct) {
+      const currentGallery = editingProduct.gallery || [];
+      if (!currentGallery.includes(url.trim())) {
+        setEditingProduct({ ...editingProduct, gallery: [...currentGallery, url.trim()] });
+        triggerToast("Added photo to product gallery");
+      }
+    } else {
+      if (!newProdGallery.includes(url.trim())) {
+        setNewProdGallery((prev) => [...prev, url.trim()]);
+        triggerToast("Added photo to product gallery");
+      }
+    }
+  }
+
+  function handleRemoveGalleryPhoto(index: number, isEditing = false) {
+    if (isEditing && editingProduct) {
+      const currentGallery = [...(editingProduct.gallery || [])];
+      currentGallery.splice(index, 1);
+      setEditingProduct({ ...editingProduct, gallery: currentGallery });
+      triggerToast("Removed photo from gallery");
+    } else {
+      setNewProdGallery((prev) => {
+        const next = [...prev];
+        next.splice(index, 1);
+        return next;
+      });
+      triggerToast("Removed photo from gallery");
+    }
   }
 
   function handleCreateProduct(e: React.FormEvent) {
@@ -374,6 +577,7 @@ export function AdminBackoffice() {
       blurb: newProdBlurb.trim() || "Heavy machinery engineered for Zimbabwean site conditions.",
       image: newProdImage || "/images/jaw-crusher.jpg",
       imageAlt: newProdName,
+      gallery: newProdGallery.length > 0 ? newProdGallery : undefined,
       spec: newProdThroughput.trim() || "Heavy-duty specification",
       sku: `OMNI-${newProdCategory.toUpperCase().slice(0, 3)}-${Math.floor(100 + Math.random() * 900)}`,
       stockStatus: "In Yard Cranborne",
@@ -395,6 +599,7 @@ export function AdminBackoffice() {
     setNewProdPrice("");
     setNewProdBlurb("");
     setNewProdImage("/images/jaw-crusher.jpg");
+    setNewProdGallery([]);
   }
 
   // CRM Pagination
@@ -950,6 +1155,129 @@ export function AdminBackoffice() {
         </div>
       )}
 
+      {/* Admin Authentication Gate */}
+      {!isAuthenticated ? (
+        <div className="min-h-screen flex flex-col justify-between bg-gradient-to-b from-[#F5F5F7] via-[#ECECEE] to-[#E5E5E8] px-4 py-8 sm:px-6 sm:py-12">
+          {/* Top minimal bar */}
+          <div className="mx-auto flex w-full max-w-5xl items-center justify-between">
+            <Link to="/" className="flex items-center gap-2.5 group">
+              <img
+                src="/mark.png"
+                alt="Omnicore Solutions"
+                className="size-8 object-contain transition-transform group-hover:scale-105"
+              />
+              <span className="text-sm font-semibold tracking-tight text-[#1D1D1F]">
+                Omnicore Solutions
+              </span>
+            </Link>
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1 text-xs font-medium text-[#6E6E73] hover:text-[#1D1D1F] transition-colors"
+            >
+              <span>Return to Public Website</span>
+              <ExternalLink className="size-3" />
+            </Link>
+          </div>
+
+          {/* Login Card */}
+          <div className="mx-auto w-full max-w-[420px] py-8">
+            <div className="rounded-3xl border border-black/[0.08] bg-white p-7 sm:p-9 shadow-[0_20px_50px_rgba(0,0,0,0.06)]">
+              {/* Header Icon */}
+              <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[#1D1D1F] text-white shadow-md">
+                <Lock className="size-6 text-white" />
+              </div>
+
+              <div className="mt-5 text-center">
+                <h1 className="text-xl font-bold tracking-tight text-[#1D1D1F]">
+                  Omnicore Backoffice
+                </h1>
+                <p className="mt-1.5 text-xs text-[#6E6E73] leading-relaxed">
+                  Authorized Operations & Technical CRM Access · Cranborne Yard, Harare
+                </p>
+              </div>
+
+              {loginError && (
+                <div className="mt-5 flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50/80 p-3.5 text-xs text-red-800 animate-in fade-in">
+                  <AlertCircle className="size-4 shrink-0 text-red-600 mt-0.5" />
+                  <div className="flex-1 font-medium">{loginError}</div>
+                </div>
+              )}
+
+              <form onSubmit={handleLogin} className="mt-6 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#1D1D1F] mb-1.5">
+                    Username / Administrator Email
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      autoComplete="username"
+                      required
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      placeholder="admin@omnisolutions.local"
+                      className="w-full rounded-xl border border-black/15 bg-[#F9F9FB] px-3.5 py-2.5 text-sm text-[#1D1D1F] placeholder:text-[#A1A1A6] focus:border-[#1D1D1F] focus:bg-white focus:outline-none transition-all shadow-2xs"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-[#1D1D1F]">
+                      Password
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      required
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder="Enter administrator password"
+                      className="w-full rounded-xl border border-black/15 bg-[#F9F9FB] px-3.5 py-2.5 text-sm text-[#1D1D1F] placeholder:text-[#A1A1A6] focus:border-[#1D1D1F] focus:bg-white focus:outline-none transition-all shadow-2xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <label className="flex items-center gap-2 text-xs text-[#6E6E73] cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={loginRemember}
+                      onChange={(e) => setLoginRemember(e.target.checked)}
+                      className="size-4 rounded border-black/25 accent-[#1D1D1F]"
+                    />
+                    <span>Remember on this device</span>
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmittingLogin}
+                  className="mt-2 w-full inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#1D1D1F] text-sm font-semibold text-white shadow-sm hover:bg-black active:scale-[0.99] disabled:opacity-60 transition-all cursor-pointer"
+                >
+                  {isSubmittingLogin ? (
+                    <span>Verifying Credentials...</span>
+                  ) : (
+                    <>
+                      <KeyRound className="size-4 text-white/80" />
+                      <span>Authenticate & Open Backoffice</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* Footer note */}
+          <div className="text-center text-xs text-[#86868B] py-2">
+            © {new Date().getFullYear()} Omnicore Solutions · Cranborne Yard, Harare, Zimbabwe
+          </div>
+        </div>
+      ) : (
+        <>
+
       {/* HD Machinery Photo Zoom Modal */}
       {zoomedPhoto && (
         <div
@@ -1017,11 +1345,26 @@ export function AdminBackoffice() {
           </div>
 
           <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-2 rounded-full border border-black/[0.08] bg-[#F5F5F7] px-3 py-1 text-xs text-[#1D1D1F]">
+              <span className="size-2 rounded-full bg-emerald-500" />
+              <span className="font-medium text-[#6E6E73]">{ADMIN_CREDENTIALS.username}</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-red-600 shadow-2xs hover:bg-red-50 transition-all active:scale-95"
+              title="Sign out of Operations Backoffice"
+            >
+              <LogOut className="size-3.5" />
+              <span>Sign Out</span>
+            </button>
+
             <Link
               to="/"
               className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white px-4 py-1.5 text-xs font-medium text-[#1D1D1F] shadow-2xs hover:bg-[#F5F5F7] transition-all active:scale-95"
             >
-              <span>View Public Website</span>
+              <span>Public Website</span>
               <ExternalLink className="size-3 text-[#86868B]" />
             </Link>
           </div>
@@ -2161,6 +2504,91 @@ export function AdminBackoffice() {
                         </div>
                       </div>
 
+                      {/* Multi-Photo Gallery & Active Photo Workspace */}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-semibold text-[#1D1D1F] block">
+                              Product Multi-Photo Gallery
+                            </span>
+                            <p className="text-[11px] text-[#86868B] mt-0.5">
+                              Post several photos per machine. Drag or click any thumbnail to set it as the primary photo.
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-black/[0.05] px-2.5 py-0.5 text-[11px] font-semibold text-[#1D1D1F]">
+                            {(editingProduct.gallery?.length || 0) + 1} {((editingProduct.gallery?.length || 0) + 1) === 1 ? "Photo" : "Photos"}
+                          </span>
+                        </div>
+
+                        {/* Thumbnails row */}
+                        <div className="flex flex-wrap items-center gap-3 p-3 rounded-2xl bg-[#F9F9FA] border border-black/[0.06]">
+                          {/* Primary Photo Chip */}
+                          <div className="relative group/primary rounded-xl overflow-hidden border-2 border-[#1FA855] p-0.5 bg-white shadow-xs">
+                            <img
+                              src={editingProduct.image || "/images/jaw-crusher.jpg"}
+                              alt="Primary"
+                              className="size-16 sm:size-20 rounded-lg object-cover"
+                            />
+                            <span className="absolute bottom-1 inset-x-1 rounded bg-[#1FA855] text-white text-[9px] font-bold text-center py-0.5 shadow-xs">
+                              Primary
+                            </span>
+                          </div>
+
+                          {/* Additional Gallery Photos */}
+                          {(editingProduct.gallery || []).map((photoUrl, idx) => (
+                            <div
+                              key={idx}
+                              className="relative group rounded-xl overflow-hidden border border-black/10 p-0.5 bg-white shadow-2xs hover:border-[#1D1D1F] transition-all"
+                            >
+                              <img
+                                src={photoUrl}
+                                alt={`Gallery ${idx + 1}`}
+                                className="size-16 sm:size-20 rounded-lg object-cover"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-between p-1 rounded-lg">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveGalleryPhoto(idx, true)}
+                                  className="self-end rounded-full bg-red-600 p-1 text-white hover:bg-red-700 shadow-xs"
+                                  title="Remove photo"
+                                >
+                                  <X className="size-2.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const oldPrimary = editingProduct.image;
+                                    const nextGallery = [...(editingProduct.gallery || [])];
+                                    nextGallery[idx] = oldPrimary;
+                                    setEditingProduct({
+                                      ...editingProduct,
+                                      image: photoUrl,
+                                      gallery: nextGallery,
+                                    });
+                                    triggerToast("Swapped as primary photo");
+                                  }}
+                                  className="w-full rounded bg-white/90 text-[#1D1D1F] text-[9px] font-semibold py-0.5 hover:bg-white"
+                                >
+                                  Make Primary
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+
+                          {/* Upload More Photos Button */}
+                          <label className="flex flex-col items-center justify-center size-16 sm:size-20 rounded-xl border border-dashed border-black/20 bg-white hover:border-[#1D1D1F] hover:bg-[#F5F5F7] cursor-pointer transition-all text-[#6E6E73] hover:text-[#1D1D1F] shrink-0">
+                            <ImagePlus className="size-5 mb-0.5 text-[#1D1D1F]" />
+                            <span className="text-[10px] font-semibold">+ Add Photo</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleImageUpload(e, true, true)}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      </div>
+
                       {/* Main Photo Visual Workspace */}
                       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
                         {/* Prominent High-Definition Preview Canvas (7 cols) */}
@@ -2178,7 +2606,7 @@ export function AdminBackoffice() {
                             <div className="absolute top-3 inset-x-3 flex items-center justify-between pointer-events-none">
                               <span className="rounded-full bg-black/75 px-3 py-1 text-[11px] font-medium text-white backdrop-blur-md flex items-center gap-2 shadow-md">
                                 <span className="size-2 rounded-full bg-[#1FA855] animate-pulse" />
-                                <span>Active Listing Photo</span>
+                                <span>Active Primary Photo</span>
                               </span>
                               <button
                                 type="button"
@@ -2231,31 +2659,39 @@ export function AdminBackoffice() {
                         <div className="lg:col-span-5 space-y-4 rounded-2xl bg-[#F9F9FA] p-4.5 border border-black/[0.06]">
                           <div>
                             <span className="text-xs font-semibold text-[#1D1D1F] block">
-                              Photo Source & Upload
+                              Upload Additional or Primary Photos
                             </span>
                             <p className="text-[11px] text-[#86868B] mt-0.5">
-                              Upload a machine image from your computer or specify an image asset path.
+                              Upload from device or enter URL. You can upload as many photos as needed.
                             </p>
                           </div>
 
-                          {/* Upload Dropzone */}
-                          <div>
-                            <label className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/[0.15] bg-white p-4 hover:border-black/30 hover:bg-[#F5F5F7] cursor-pointer transition-all">
-                              <div className="flex size-9 items-center justify-center rounded-full bg-black/[0.05] text-[#1D1D1F]">
-                                <Upload className="size-4" />
-                              </div>
-                              <div className="text-center">
-                                <span className="text-xs font-semibold text-[#1D1D1F] block">
-                                  Upload Machine Photo
-                                </span>
-                                <span className="text-[10px] text-[#86868B] block mt-0.5">
-                                  PNG, JPG, WEBP up to 8MB
-                                </span>
-                              </div>
+                          {/* Dual Upload Options */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-black/[0.15] bg-white p-3 hover:border-black/30 hover:bg-[#F5F5F7] cursor-pointer transition-all text-center">
+                              <Upload className="size-4 text-[#1D1D1F]" />
+                              <span className="text-[11px] font-semibold text-[#1D1D1F]">
+                                Set Primary
+                              </span>
+                              <span className="text-[9px] text-[#86868B]">Replace hero</span>
                               <input
                                 type="file"
                                 accept="image/*"
-                                onChange={(e) => handleImageUpload(e, true)}
+                                onChange={(e) => handleImageUpload(e, true, false)}
+                                className="hidden"
+                              />
+                            </label>
+
+                            <label className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-emerald-300 bg-emerald-50/50 p-3 hover:border-emerald-500 hover:bg-emerald-50 cursor-pointer transition-all text-center">
+                              <ImagePlus className="size-4 text-emerald-700" />
+                              <span className="text-[11px] font-semibold text-emerald-900">
+                                Add to Gallery
+                              </span>
+                              <span className="text-[9px] text-emerald-700/80">Extra photo</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleImageUpload(e, true, true)}
                                 className="hidden"
                               />
                             </label>
@@ -2264,7 +2700,7 @@ export function AdminBackoffice() {
                           {/* Direct Path / URL Input */}
                           <div className="space-y-1.5">
                             <label className="text-xs font-medium text-[#1D1D1F] flex items-center justify-between">
-                              <span>Asset Path or URL:</span>
+                              <span>Primary Photo URL / Path:</span>
                               <span className="text-[10px] text-[#86868B] font-mono">/images/...</span>
                             </label>
                             <input
@@ -2276,162 +2712,213 @@ export function AdminBackoffice() {
                             />
                           </div>
 
-                          {/* Multi-Channel Distribution Badges */}
-                          <div className="border-t border-black/[0.06] pt-3 space-y-1.5 text-[11px] text-[#6E6E73]">
-                            <span className="font-semibold text-[#1D1D1F] text-[10px] uppercase tracking-wider block">
-                              Active Photo Distribution
-                            </span>
-                            <div className="flex items-center gap-1.5 text-xs">
-                              <span className="size-1.5 rounded-full bg-[#1FA855]" />
-                              <span>Public Catalogue card</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs">
-                              <span className="size-1.5 rounded-full bg-[#1FA855]" />
-                              <span>WhatsApp client quote spec sheet</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs">
-                              <span className="size-1.5 rounded-full bg-[#1FA855]" />
-                              <span>Cranborne yard inventory record</span>
-                            </div>
+                          {/* Add extra URL directly to gallery */}
+                          <div className="pt-1">
+                            <form
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                const form = e.currentTarget;
+                                const input = form.elements.namedItem("extraUrl") as HTMLInputElement;
+                                if (input && input.value) {
+                                  handleAddGalleryUrl(input.value, true);
+                                  input.value = "";
+                                }
+                              }}
+                              className="flex items-center gap-1.5"
+                            >
+                              <input
+                                type="text"
+                                name="extraUrl"
+                                placeholder="Paste extra photo URL..."
+                                className="flex-1 h-8 rounded-lg border border-black/[0.08] bg-white px-2.5 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-black/20"
+                              />
+                              <button
+                                type="submit"
+                                className="h-8 px-3 rounded-lg bg-[#1D1D1F] text-white text-[11px] font-semibold hover:bg-black transition-all shrink-0 cursor-pointer"
+                              >
+                                + Add URL
+                              </button>
+                            </form>
                           </div>
                         </div>
                       </div>
 
-                      {/* Professional Spacious Harare Yard Asset Library (Preset Selector) */}
-                      <div className="border-t border-black/[0.06] pt-5 space-y-4">
+                      {/* Collapsible & Category-Filtered Fleet Photography Library */}
+                      <div className="border-t border-black/[0.06] pt-4 space-y-3">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Package className="size-4 text-[#1D1D1F]" />
-                              <h4 className="text-sm font-semibold text-[#1D1D1F]">
-                                Harare Yard Fleet Photography Library
-                              </h4>
+                          <div className="flex items-center gap-2">
+                            <Package className="size-4 text-[#1D1D1F]" />
+                            <h4 className="text-sm font-semibold text-[#1D1D1F]">
+                              Harare Yard Fleet Photography Library
+                            </h4>
+                            <span className="rounded-full bg-black/[0.05] px-2 py-0.5 text-[10px] font-medium text-[#6E6E73]">
+                              {editingProduct.category ? `${editingProduct.category.toUpperCase()} Division Photos` : "Preset Library"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setIsPhotoLibraryExpanded(!isPhotoLibraryExpanded)}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white px-3 py-1.5 text-xs font-semibold text-[#1D1D1F] shadow-2xs hover:bg-[#F5F5F7] transition-all cursor-pointer"
+                            >
+                              {isPhotoLibraryExpanded ? (
+                                <>
+                                  <ChevronUp className="size-3.5" />
+                                  <span>Collapse Library</span>
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="size-3.5" />
+                                  <span>Expand Library ({editingProduct.category ? `${editingProduct.category} only` : "all"})</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Collapsible Content */}
+                        {isPhotoLibraryExpanded && (
+                          <div className="space-y-3.5 rounded-2xl bg-[#F9F9FA] p-3.5 border border-black/[0.06] animate-in fade-in duration-200">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                              {/* Filter buttons */}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {[
+                                  { id: editingProduct.category || "all", label: `Related to this ${editingProduct.category || "item"}` },
+                                  { id: "all", label: "Show All Fleet Categories" },
+                                ].map((tab) => {
+                                  const active = (presetCategoryFilter === tab.id) || (presetCategoryFilter === "all" && tab.id === "all");
+                                  return (
+                                    <button
+                                      key={tab.id}
+                                      type="button"
+                                      onClick={() => setPresetCategoryFilter(tab.id)}
+                                      className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
+                                        presetCategoryFilter === tab.id
+                                          ? "bg-[#1D1D1F] text-white shadow-2xs font-semibold"
+                                          : "bg-white text-[#6E6E73] hover:text-[#1D1D1F] border border-black/[0.06]"
+                                      }`}
+                                    >
+                                      <span>{tab.label}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Instant Search Bar */}
+                              <div className="relative min-w-[200px]">
+                                <Search className="absolute left-2.5 top-2 size-3 text-[#86868B]" />
+                                <input
+                                  type="text"
+                                  value={photoPresetSearch}
+                                  onChange={(e) => setPhotoPresetSearch(e.target.value)}
+                                  placeholder="Filter photos..."
+                                  className="w-full h-7.5 rounded-lg border border-black/[0.08] bg-white pl-7 pr-3 text-xs text-[#1D1D1F] focus:outline-none transition-colors"
+                                />
+                                {photoPresetSearch && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setPhotoPresetSearch("")}
+                                    className="absolute right-2 top-2 text-[#86868B] hover:text-[#1D1D1F]"
+                                  >
+                                    <X className="size-3" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                            <p className="text-xs text-[#86868B] mt-0.5">
-                              Click any verified machine card below to instantly set as the primary photo.
-                            </p>
-                          </div>
 
-                          {/* Instant Search Bar */}
-                          <div className="relative min-w-[220px]">
-                            <Search className="absolute left-3 top-2.5 size-3.5 text-[#86868B]" />
-                            <input
-                              type="text"
-                              value={photoPresetSearch}
-                              onChange={(e) => setPhotoPresetSearch(e.target.value)}
-                              placeholder="Search machine models..."
-                              className="w-full h-8.5 rounded-full border border-black/[0.08] bg-[#F5F5F7] pl-8.5 pr-3 text-xs text-[#1D1D1F] focus:bg-white focus:outline-none transition-colors"
-                            />
-                            {photoPresetSearch && (
-                              <button
-                                type="button"
-                                onClick={() => setPhotoPresetSearch("")}
-                                className="absolute right-2.5 top-2.5 text-[#86868B] hover:text-[#1D1D1F]"
-                              >
-                                <X className="size-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
+                            {/* Machinery Photo Cards Grid */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 max-h-[360px] overflow-y-auto p-1">
+                              {YARD_PHOTO_PRESETS.filter((p) => {
+                                const activeCat = presetCategoryFilter === "all" ? null : (presetCategoryFilter || editingProduct.category);
+                                const matchesCat = !activeCat || p.category === activeCat;
+                                const matchesSearch =
+                                  !photoPresetSearch ||
+                                  p.label.toLowerCase().includes(photoPresetSearch.toLowerCase()) ||
+                                  p.spec.toLowerCase().includes(photoPresetSearch.toLowerCase()) ||
+                                  p.badge.toLowerCase().includes(photoPresetSearch.toLowerCase());
+                                return matchesCat && matchesSearch;
+                              }).map((preset) => {
+                                const isPrimary = editingProduct.image === preset.src;
+                                const isInGallery = (editingProduct.gallery || []).includes(preset.src);
+                                return (
+                                  <div
+                                    key={preset.src}
+                                    className={`group relative flex flex-col text-left rounded-xl p-2 border transition-all ${
+                                      isPrimary
+                                        ? "border-[#1FA855] bg-white ring-2 ring-[#1FA855] shadow-xs"
+                                        : isInGallery
+                                        ? "border-blue-400 bg-blue-50/20"
+                                        : "border-black/[0.08] bg-white hover:border-black/[0.2]"
+                                    }`}
+                                  >
+                                    <div className="relative h-24 sm:h-28 w-full rounded-lg overflow-hidden bg-black/[0.04] mb-2">
+                                      <img
+                                        src={preset.src}
+                                        alt={preset.label}
+                                        className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).src = "/images/hero.jpg";
+                                        }}
+                                      />
+                                      <span className="absolute top-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[8px] font-semibold text-white uppercase tracking-wider backdrop-blur-xs">
+                                        {preset.category}
+                                      </span>
 
-                        {/* Category Filter Tabs */}
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {[
-                            { id: "all", label: "All Fleet", count: 23 },
-                            { id: "mining", label: "Mining Circuits", count: 7 },
-                            { id: "hire", label: "Plant Hire Fleet", count: 5 },
-                            { id: "farming", label: "Farming & Feed", count: 4 },
-                            { id: "hardware", label: "Hardware & Fence", count: 4 },
-                            { id: "industry", label: "Industrial Power", count: 3 },
-                          ].map((f) => {
-                            const active = presetCategoryFilter === f.id;
-                            return (
-                              <button
-                                key={f.id}
-                                type="button"
-                                onClick={() => setPresetCategoryFilter(f.id)}
-                                className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all ${
-                                  active
-                                    ? "bg-[#1D1D1F] text-white shadow-2xs font-semibold"
-                                    : "bg-[#F5F5F7] text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-black/[0.06]"
-                                }`}
-                              >
-                                <span>{f.label}</span>
-                                <span
-                                  className={`rounded-full px-1.5 py-0.2 text-[10px] ${
-                                    active ? "bg-white/20 text-white" : "bg-black/[0.05] text-[#86868B]"
-                                  }`}
-                                >
-                                  {f.count}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Spacious Visual Grid of Machinery Cards */}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5 max-h-[440px] overflow-y-auto p-2 rounded-2xl bg-[#F9F9FA] border border-black/[0.06]">
-                          {YARD_PHOTO_PRESETS.filter((p) => {
-                            const matchesCat = presetCategoryFilter === "all" || p.category === presetCategoryFilter;
-                            const matchesSearch =
-                              !photoPresetSearch ||
-                              p.label.toLowerCase().includes(photoPresetSearch.toLowerCase()) ||
-                              p.spec.toLowerCase().includes(photoPresetSearch.toLowerCase()) ||
-                              p.badge.toLowerCase().includes(photoPresetSearch.toLowerCase());
-                            return matchesCat && matchesSearch;
-                          }).map((preset) => {
-                            const isSelected = editingProduct.image === preset.src;
-                            return (
-                              <button
-                                type="button"
-                                key={preset.src}
-                                onClick={() => {
-                                  setEditingProduct({ ...editingProduct, image: preset.src });
-                                  triggerToast(`Applied ${preset.label} yard photo`);
-                                }}
-                                className={`group relative flex flex-col text-left rounded-2xl p-2.5 border transition-all ${
-                                  isSelected
-                                    ? "border-[#1D1D1F] bg-white ring-2 ring-[#1D1D1F] shadow-sm"
-                                    : "border-black/[0.08] bg-white hover:border-black/[0.2] hover:shadow-xs"
-                                }`}
-                              >
-                                <div className="relative h-28 sm:h-32 w-full rounded-xl overflow-hidden bg-black/[0.04] mb-2.5">
-                                  <img
-                                    src={preset.src}
-                                    alt={preset.label}
-                                    className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
-                                    onError={(e) => {
-                                      (e.target as HTMLImageElement).src = "/images/hero.jpg";
-                                    }}
-                                  />
-                                  {/* Category pill */}
-                                  <span className="absolute top-1.5 left-1.5 rounded-md bg-black/70 px-2 py-0.5 text-[9px] font-semibold text-white uppercase tracking-wider backdrop-blur-xs">
-                                    {preset.category}
-                                  </span>
-
-                                  {/* Selection Checkmark */}
-                                  {isSelected && (
-                                    <div className="absolute top-1.5 right-1.5 size-6 rounded-full bg-[#1FA855] text-white flex items-center justify-center shadow-xs">
-                                      <Check className="size-3.5 stroke-[2.5]" />
+                                      {isPrimary && (
+                                        <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded-full bg-[#1FA855] text-white text-[9px] font-bold shadow-xs">
+                                          Primary
+                                        </div>
+                                      )}
+                                      {!isPrimary && isInGallery && (
+                                        <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded-full bg-blue-600 text-white text-[9px] font-bold shadow-xs">
+                                          In Gallery
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
-                                </div>
 
-                                <div className="space-y-0.5 min-w-0 flex-1">
-                                  <p className="text-xs font-semibold text-[#1D1D1F] truncate group-hover:text-black leading-tight">
-                                    {preset.label}
-                                  </p>
-                                  <p className="text-[11px] text-[#6E6E73] truncate">
-                                    {preset.spec}
-                                  </p>
-                                  <span className="inline-block text-[10px] font-medium text-[#86868B] bg-black/[0.03] px-1.5 py-0.5 rounded mt-1">
-                                    {preset.badge}
-                                  </span>
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
+                                    <div className="space-y-0.5 min-w-0 flex-1">
+                                      <p className="text-xs font-semibold text-[#1D1D1F] truncate leading-tight">
+                                        {preset.label}
+                                      </p>
+                                      <p className="text-[10px] text-[#6E6E73] truncate">
+                                        {preset.spec}
+                                      </p>
+                                    </div>
+
+                                    {/* Action buttons */}
+                                    <div className="mt-2 pt-1.5 border-t border-black/[0.06] flex items-center gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingProduct({ ...editingProduct, image: preset.src });
+                                          triggerToast(`Set as primary: ${preset.label}`);
+                                        }}
+                                        className={`flex-1 text-[10px] font-semibold py-1 rounded transition-all cursor-pointer ${
+                                          isPrimary
+                                            ? "bg-[#1FA855] text-white"
+                                            : "bg-black/[0.05] text-[#1D1D1F] hover:bg-black/10"
+                                        }`}
+                                      >
+                                        {isPrimary ? "Primary" : "Use Primary"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleAddGalleryUrl(preset.src, true);
+                                        }}
+                                        className="text-[10px] font-semibold py-1 px-2 rounded bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-all cursor-pointer"
+                                        title="Add as secondary gallery photo"
+                                      >
+                                        + Gallery
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -3574,11 +4061,30 @@ export function AdminBackoffice() {
                   <span>Reset Defaults</span>
                 </button>
 
-                {/* View Layout Mode Switcher (Full Real Estate vs Split Studio) */}
+                {/* View Layout Mode Switcher (Full Real Estate vs Split Studio vs Toggle Preview) */}
                 <div className="inline-flex rounded-full bg-[#F5F5F7] p-0.5 border border-black/[0.08] text-xs">
                   <button
                     type="button"
-                    onClick={() => setCmsLayoutMode("full")}
+                    onClick={() => {
+                      setCmsLayoutMode("split");
+                      setIsCmsPreviewOpen(!isCmsPreviewOpen);
+                    }}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                      isCmsPreviewOpen && cmsLayoutMode === "split"
+                        ? "bg-white text-[#1D1D1F] shadow-2xs font-semibold"
+                        : "text-[#6E6E73] hover:text-[#1D1D1F]"
+                    }`}
+                    title="Toggle Live Interactive Visual Preview panel"
+                  >
+                    <Eye className="size-3.5 text-emerald-600" />
+                    <span>{isCmsPreviewOpen && cmsLayoutMode === "split" ? "Hide Live Preview" : "Show Live Preview"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCmsLayoutMode("full");
+                      setIsCmsPreviewOpen(false);
+                    }}
                     className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all ${
                       cmsLayoutMode === "full"
                         ? "bg-white text-[#1D1D1F] shadow-2xs font-semibold"
@@ -3587,20 +4093,7 @@ export function AdminBackoffice() {
                     title="Expand across 100% of screen real estate with multi-column layouts"
                   >
                     <Maximize2 className="size-3.5" />
-                    <span>Full-Width Studio</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCmsLayoutMode("split")}
-                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all ${
-                      cmsLayoutMode === "split"
-                        ? "bg-white text-[#1D1D1F] shadow-2xs font-semibold"
-                        : "text-[#6E6E73] hover:text-[#1D1D1F]"
-                    }`}
-                    title="View side-by-side interactive live preview"
-                  >
-                    <Columns className="size-3.5" />
-                    <span>Split Live Preview</span>
+                    <span>Full-Width Editor</span>
                   </button>
                 </div>
 
@@ -3667,9 +4160,9 @@ export function AdminBackoffice() {
             </div>
 
             {/* Main Content: Full-Width Studio or Split Live Preview */}
-            <div className={cmsLayoutMode === "split" ? "grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" : "w-full"}>
+            <div className={cmsLayoutMode === "split" && isCmsPreviewOpen ? "grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" : "w-full"}>
               {/* Field Editor Column */}
-              <div className={cmsLayoutMode === "split" ? "lg:col-span-8 xl:col-span-8 space-y-6" : "w-full space-y-6"}>
+              <div className={cmsLayoutMode === "split" && isCmsPreviewOpen ? "lg:col-span-7 xl:col-span-7 space-y-6" : "w-full space-y-6"}>
                 <form onSubmit={handleSaveSiteCopy} className="space-y-6">
                   {/* Category 1: Hero & Brand */}
                   {(cmsCategory === "hero" || cmsCategory === "all" || cmsSearch) && (
@@ -4837,28 +5330,39 @@ export function AdminBackoffice() {
               </div>
 
               {/* Right Column: Live Interactive Visual Preview Studio (5 cols) */}
-              <div className="lg:col-span-5 xl:col-span-5 sticky top-20 space-y-4">
-                <div className="rounded-3xl border border-black/[0.06] bg-white p-5 shadow-xs space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
-                        <Eye className="size-4" />
+              {cmsLayoutMode === "split" && isCmsPreviewOpen && (
+                <div className="lg:col-span-5 xl:col-span-5 sticky top-20 space-y-4 animate-in fade-in duration-200">
+                  <div className="rounded-3xl border border-black/[0.06] bg-white p-5 shadow-xs space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                          <Eye className="size-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-semibold text-[#1D1D1F]">
+                            Live Interactive Visual Preview
+                          </h3>
+                          <p className="text-[10px] text-[#86868B]">
+                            Simulates real-time rendering as you type
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="text-sm font-semibold text-[#1D1D1F]">
-                          Live Interactive Visual Preview
-                        </h3>
-                        <p className="text-[10px] text-[#86868B]">
-                          Simulates real-time rendering as you type
-                        </p>
+
+                      <div className="flex items-center gap-2">
+                        <span className="flex items-center gap-1 rounded-full bg-emerald-100/70 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                          <span className="size-1.5 rounded-full bg-emerald-600 animate-ping" />
+                          <span>Live Sync</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsCmsPreviewOpen(false)}
+                          className="rounded-full p-1 text-[#86868B] hover:text-[#1D1D1F] hover:bg-black/[0.05]"
+                          title="Hide Live Preview"
+                        >
+                          <X className="size-3.5" />
+                        </button>
                       </div>
                     </div>
-
-                    <span className="flex items-center gap-1 rounded-full bg-emerald-100/70 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
-                      <span className="size-1.5 rounded-full bg-emerald-600 animate-ping" />
-                      <span>Live Sync</span>
-                    </span>
-                  </div>
 
                   {/* Preview Mode Selector */}
                   <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 rounded-xl bg-black/[0.04] p-1 text-[11px]">
@@ -5186,6 +5690,7 @@ export function AdminBackoffice() {
                   </div>
                 </div>
               </div>
+              )}
             </div>
           </div>
         )}
@@ -5496,6 +6001,8 @@ export function AdminBackoffice() {
           onCancel={() => setPendingAction(null)}
           onConfirm={runPendingAction}
         />
+      )}
+        </>
       )}
     </div>
   );

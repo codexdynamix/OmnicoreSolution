@@ -66,15 +66,6 @@ export function SiteHeader() {
 
         {/* Actions */}
         <div className="flex items-center gap-2.5">
-          <Link
-            to="/admin"
-            className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-500/20 transition-all active:scale-95 shadow-2xs"
-            title="Access Technical Desk & Operations Backoffice"
-          >
-            <span className="size-1.5 rounded-full bg-amber-600 animate-pulse" />
-            <span>Backoffice</span>
-          </Link>
-
           <a
             href={whatsappUrl("Hello Omnicore Harare Desk — I need a quote.")}
             className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-[#1fa855] px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs transition-all hover:bg-[#1b934b] active:scale-95"
@@ -151,14 +142,6 @@ export function SiteHeader() {
             </div>
 
             <div className="pt-4 flex flex-col gap-2">
-              <Link
-                to="/admin"
-                onClick={() => setOpen(false)}
-                className="flex items-center justify-center gap-2 rounded-full bg-amber-500/20 py-2.5 text-xs font-semibold text-amber-950 border border-amber-500/40"
-              >
-                <span className="size-2 rounded-full bg-amber-600 animate-pulse" />
-                <span>Launch Admin Backoffice</span>
-              </Link>
               <Link
                 to="/quote"
                 onClick={() => setOpen(false)}

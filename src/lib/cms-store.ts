@@ -575,5 +575,317 @@ export function saveStoredRecycleBin(items: RecycleBinItem[]) {
   }
 }
 
+// ============================================================================
+// PLANT HIRE DEPLOYMENTS & FIELD FLEET STORE
+// ============================================================================
+export const STORAGE_KEY_DEPLOYMENTS = "omnicore_field_deployments_v2";
+
+export type DeploymentStatus =
+  | "Active on Site"
+  | "Scheduled Mobilization"
+  | "Demobilizing / In Transit"
+  | "Routine Service / Standby"
+  | "Returned to Cranborne Yard";
+
+export type DeploymentRecord = {
+  id: string;
+  productId?: string;
+  plant: string;
+  category: "hire" | "mining" | "farming" | "hardware" | "industry";
+  image: string;
+  sku: string;
+  client: string;
+  site: string;
+  province: string;
+  operator: string;
+  rate: string;
+  dailyRateUSD: number;
+  status: DeploymentStatus;
+  startDate: string;
+  scheduledReturn: string;
+  contractRef: string;
+  contactPerson?: string;
+  contactPhone?: string;
+  notes?: string;
+};
+
+export const DEFAULT_DEPLOYMENTS: DeploymentRecord[] = [
+  {
+    id: "DEP-01",
+    productId: "cat-320d-excavator",
+    plant: "20-Tonne CAT 320D Excavator",
+    category: "hire",
+    image: "/images/cat-excavator.jpg",
+    sku: "OMNI-HIR-320D",
+    client: "Great Dyke Quarries Ltd",
+    site: "Shamva Gold Claims, Mash Central",
+    province: "Mashonaland Central",
+    operator: "Wet Rate (With Certified Operator)",
+    rate: "$480 / day",
+    dailyRateUSD: 480,
+    status: "Active on Site",
+    startDate: "2026-09-01",
+    scheduledReturn: "2026-10-15",
+    contractRef: "CNT-2026-088",
+    contactPerson: "Eng. T. Masvingise",
+    contactPhone: "+263 77 210 9441",
+    notes: "Overburden stripping on Reef 3. 250hr service completed on site by Cranborne field team.",
+  },
+  {
+    id: "DEP-02",
+    productId: "37m-concrete-boom-pump",
+    plant: "37m Concrete Boom Pump (Isuzu 6x4)",
+    category: "hire",
+    image: "/images/concrete-pump.jpg",
+    sku: "OMNI-HIR-37M",
+    client: "Terracotta Projects",
+    site: "Highland Park Extension, Harare",
+    province: "Harare",
+    operator: "Wet Rate (With Certified Operator)",
+    rate: "$1,800 / pour",
+    dailyRateUSD: 1800,
+    status: "Active on Site",
+    startDate: "2026-09-20",
+    scheduledReturn: "2026-09-28",
+    contractRef: "CNT-2026-092",
+    contactPerson: "Farai Chitepo",
+    contactPhone: "+263 71 833 0019",
+    notes: "Basement slab and column pour. Pipe wash-out station verified at Cranborne yard prior to dispatch.",
+  },
+  {
+    id: "DEP-03",
+    productId: "tlb-backhoe-loader",
+    plant: "TLB Backhoe Loader (4x4 Turbo 100HP)",
+    category: "hire",
+    image: "/images/tlb-loader.jpg",
+    sku: "OMNI-HIR-TLB",
+    client: "Zim-Agro Holdings",
+    site: "Chinhoyi Farm Block 4",
+    province: "Mashonaland West",
+    operator: "Dry Rate (Machine Only)",
+    rate: "$240 / day",
+    dailyRateUSD: 240,
+    status: "Active on Site",
+    startDate: "2026-09-10",
+    scheduledReturn: "2026-10-02",
+    contractRef: "CNT-2026-079",
+    contactPerson: "D. Van Der Merwe",
+    contactPhone: "+263 77 409 1182",
+    notes: "Irrigation trenching and dam wall maintenance. Fuel supplied on farm.",
+  },
+  {
+    id: "DEP-04",
+    productId: "shantui-160hp-grader",
+    plant: "Motor Grader (Shantui 160HP)",
+    category: "hire",
+    image: "/images/motor-grader.jpg",
+    sku: "OMNI-HIR-GRD",
+    client: "Norton Municipality Subcontractor",
+    site: "Norton Ring Road Phase 2",
+    province: "Mashonaland West",
+    operator: "Wet Rate (With Certified Operator)",
+    rate: "$520 / day",
+    dailyRateUSD: 520,
+    status: "Scheduled Mobilization",
+    startDate: "2026-10-01",
+    scheduledReturn: "2026-10-25",
+    contractRef: "CNT-2026-101",
+    contactPerson: "Blessing Moyo",
+    contactPhone: "+263 77 392 4851",
+    notes: "Subgrade leveling and storm drain profiling. Lowbed booked for 01 Oct 06:00 mobilization from Cranborne.",
+  },
+  {
+    id: "DEP-05",
+    productId: "tipper-truck-20t",
+    plant: "20-Tonne Tipper Truck (SinoTruk 371)",
+    category: "hire",
+    image: "/images/tipper-truck.jpg",
+    sku: "OMNI-HIR-TIP20",
+    client: "Midlands Chrome Consortium",
+    site: "Shurugwi Chrome Pit 7",
+    province: "Midlands",
+    operator: "Wet Rate (Double Shift Crew)",
+    rate: "$360 / day",
+    dailyRateUSD: 360,
+    status: "Active on Site",
+    startDate: "2026-08-15",
+    scheduledReturn: "2026-11-15",
+    contractRef: "CNT-2026-064",
+    contactPerson: "K. Sibanda",
+    contactPhone: "+263 77 554 9912",
+    notes: "Hauling run-of-mine chrome ore from pit face to wash plant. 90-day seasonal hire contract.",
+  },
+  {
+    id: "DEP-06",
+    productId: "jaw-crusher-mobile",
+    plant: "Mobile Tracked Jaw Crusher (30 TPH)",
+    category: "mining",
+    image: "/images/jaw-crusher.jpg",
+    sku: "OMNI-MIN-CRU30",
+    client: "Goromonzi Lithium Ventures",
+    site: "Goromonzi Lithium Hard-Rock Claim",
+    province: "Mashonaland East",
+    operator: "Wet Rate (With Plant Mechanic)",
+    rate: "$950 / day",
+    dailyRateUSD: 950,
+    status: "Active on Site",
+    startDate: "2026-09-05",
+    scheduledReturn: "2026-10-30",
+    contractRef: "CNT-2026-085",
+    contactPerson: "L. Zhou",
+    contactPhone: "+263 78 440 2291",
+    notes: "Primary pegmatite reduction down to -40mm. Includes spare manganese jaw plates stored on site container.",
+  },
+  {
+    id: "DEP-07",
+    productId: "perkins-50kva-generator",
+    plant: "50kVA Perkins Silent Diesel Generator",
+    category: "hardware",
+    image: "/images/generator.jpg",
+    sku: "OMNI-HDW-GEN50",
+    client: "Beatrice Dairies & Agro",
+    site: "Beatrice Central Cold-Chain Unit",
+    province: "Mashonaland East",
+    operator: "Dry Rate (Machine Only)",
+    rate: "$140 / day",
+    dailyRateUSD: 140,
+    status: "Active on Site",
+    startDate: "2026-09-12",
+    scheduledReturn: "2026-10-12",
+    contractRef: "CNT-2026-090",
+    contactPerson: "Grace Munemo",
+    contactPhone: "+263 77 114 7730",
+    notes: "Standby backup for milk cooling tanks during national grid load shedding.",
+  },
+  {
+    id: "DEP-08",
+    productId: "self-loading-mixer",
+    plant: "Self-Loading Concrete Mixer (3.5m³)",
+    category: "hire",
+    image: "/images/concrete-mixer.jpg",
+    sku: "OMNI-HIR-SLM35",
+    client: "Mbare Urban Infrastructure Trust",
+    site: "Mbare Drainage & Paving Project",
+    province: "Harare",
+    operator: "Wet Rate (With Certified Operator)",
+    rate: "$380 / day",
+    dailyRateUSD: 380,
+    status: "Active on Site",
+    startDate: "2026-09-18",
+    scheduledReturn: "2026-10-08",
+    contractRef: "CNT-2026-094",
+    contactPerson: "T. Gumbo",
+    contactPhone: "+263 77 882 1044",
+    notes: "High-mobility 4WD mixer operating in dense urban streets without central batching plant.",
+  },
+  {
+    id: "DEP-09",
+    productId: "d6-bulldozer",
+    plant: "CAT D6R Bulldozer (Semi-U Blade)",
+    category: "hire",
+    image: "/images/cat-excavator.jpg",
+    sku: "OMNI-HIR-D6R",
+    client: "Hwange Coal Roadways Ltd",
+    site: "Hwange West Haul Road Strip",
+    province: "Matabeleland North",
+    operator: "Wet Rate (With Certified Operator)",
+    rate: "$650 / day",
+    dailyRateUSD: 650,
+    status: "Active on Site",
+    startDate: "2026-08-01",
+    scheduledReturn: "2026-11-01",
+    contractRef: "CNT-2026-052",
+    contactPerson: "J. Ndlovu",
+    contactPhone: "+263 77 620 3388",
+    notes: "Haul road pioneering and spoil dump shaping. Rippers serviced before handover.",
+  },
+  {
+    id: "DEP-10",
+    productId: "roller-10t",
+    plant: "10-Tonne Single Drum Vibratory Roller",
+    category: "hire",
+    image: "/images/roller.jpg",
+    sku: "OMNI-HIR-ROL10",
+    client: "Kwekwe Civil Contractors",
+    site: "Kwekwe CBD Industrial Bypass",
+    province: "Midlands",
+    operator: "Dry Rate (Machine Only)",
+    rate: "$280 / day",
+    dailyRateUSD: 280,
+    status: "Demobilizing / In Transit",
+    startDate: "2026-09-01",
+    scheduledReturn: "2026-09-26",
+    contractRef: "CNT-2026-081",
+    contactPerson: "Maxwell Chuma",
+    contactPhone: "+263 77 901 2244",
+    notes: "Contract completed. Cranborne lowbed truck en route for pickup back to Harare.",
+  },
+  {
+    id: "DEP-11",
+    productId: "farm-tractor-90hp",
+    plant: "90HP 4WD Agricultural Tractor",
+    category: "farming",
+    image: "/images/tractor.jpg",
+    sku: "OMNI-FRM-TRC90",
+    client: "Mazowe Citrus & Soya Estate",
+    site: "Mazowe Valley Sector C",
+    province: "Mashonaland Central",
+    operator: "Dry Rate (Machine Only)",
+    rate: "$190 / day",
+    dailyRateUSD: 190,
+    status: "Routine Service / Standby",
+    startDate: "2026-09-14",
+    scheduledReturn: "2026-10-14",
+    contractRef: "CNT-2026-091",
+    contactPerson: "P. Ruzive",
+    contactPhone: "+263 77 319 8840",
+    notes: "Scheduled 500-hour hydraulic filter and transmission oil service being conducted by mobile field technician.",
+  },
+  {
+    id: "DEP-12",
+    productId: "wheel-loader-5t",
+    plant: "XCMG 5-Tonne Front Wheel Loader",
+    category: "hire",
+    image: "/images/wheel-loader.jpg",
+    sku: "OMNI-HIR-WL50",
+    client: "Border Timbers Mutare",
+    site: "Nyakamete Industrial Area, Mutare",
+    province: "Manicaland",
+    operator: "Wet Rate (With Certified Operator)",
+    rate: "$420 / day",
+    dailyRateUSD: 420,
+    status: "Returned to Cranborne Yard",
+    startDate: "2026-08-10",
+    scheduledReturn: "2026-09-22",
+    contractRef: "CNT-2026-068",
+    contactPerson: "Simba Mutasa",
+    contactPhone: "+263 71 229 0041",
+    notes: "Contract successfully completed. Full post-hire inspection passed at Cranborne yard. Ready for re-hire.",
+  },
+];
+
+export function getStoredDeployments(): DeploymentRecord[] {
+  if (typeof window === "undefined") return DEFAULT_DEPLOYMENTS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_DEPLOYMENTS);
+    if (!raw) return DEFAULT_DEPLOYMENTS;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_DEPLOYMENTS;
+  } catch {
+    return DEFAULT_DEPLOYMENTS;
+  }
+}
+
+export function saveStoredDeployments(deployments: DeploymentRecord[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY_DEPLOYMENTS, JSON.stringify(deployments));
+    window.dispatchEvent(new CustomEvent("omnicore-deployments-updated"));
+  } catch {
+    // ignore
+  }
+}
+
+
 
 

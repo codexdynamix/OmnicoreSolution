@@ -287,6 +287,7 @@ export type Equipment = {
   blurb: string;
   image: string;
   imageAlt: string;
+  gallery?: string[];
   spec?: string;
   price?: string;
   priceNote?: string;
